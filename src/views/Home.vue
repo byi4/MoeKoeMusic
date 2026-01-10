@@ -47,18 +47,25 @@
             </div>
 
             <div class="recommend-card">
-                <div class="playlist-entry gradient-background">
-                    <router-link :to="{
-                        path: '/PlaylistDetail',
-                        query: { global_collection_id: 'collection_3_25230245_24_0' }
-                    }">
-                        <div class="playlist-content">
-                            <div class="playlist-icon">
-                                <img src="@/assets/images/home/hutao.png" />
-                            </div>
-                            <div class="ranking-description">送给也喜欢音乐的你</div>
+              <!-- collection_3_25230245_24_0 -->
+                <div class="playlist-entry gradient-background" @click="startPersonalFM">
+                    <div class="playlist-content">
+                        <div class="playlist-icon">
+                            <img src="@/assets/images/home/hutao.png" />
                         </div>
-                    </router-link>
+                        <h3 class="ranking-title">私人FM</h3>
+                        <div class="fm-settings">
+                            <div class="fm-mode-indicator" :title="getAIModeDescription(personalFMStore.songPoolId)">
+                                {{ getAIModeName(personalFMStore.songPoolId) }}
+                            </div>
+                            <div class="fm-mode-indicator" :title="getDiscoveryModeDescription(personalFMStore.mode)">
+                                {{ getDiscoveryModeName(personalFMStore.mode) }}
+                            </div>
+                            <button class="fm-settings-btn" @click.stop="showFMSettings" title="设置私人FM参数">
+                                ⚙️
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -103,18 +110,73 @@
             </div>
         </div>
         <ContextMenu ref="contextMenuRef" :playerControl="playerControl" />
+        
+        <!-- FM设置模态框 -->
+        <div v-if="showFMSettingsModal" class="fm-settings-modal" @click.self="showFMSettingsModal = false">
+            <div class="fm-settings-content">
+                <div class="fm-settings-header">
+                    <h3>私人FM设置</h3>
+                    <button class="close-btn" @click="showFMSettingsModal = false">
+                        ✕
+                    </button>
+                </div>
+                <div class="fm-settings-body">
+                    <!-- AI模式设置 -->
+                    <div class="settings-section">
+                        <h4 class="section-title-small">AI推荐模式</h4>
+                        <div class="ai-mode-option"
+                             v-for="mode in [0, 1, 2]"
+                             :key="'ai-' + mode"
+                             :class="{ active: personalFMStore.songPoolId === mode }"
+                             @click="selectAIMode(mode)">
+                            <div class="mode-info">
+                                <div class="mode-name">{{ getAIModeName(mode) }}</div>
+                                <div class="mode-description">{{ getAIModeDescription(mode) }}</div>
+                            </div>
+                            <div class="mode-selector">
+                                <span v-if="personalFMStore.songPoolId === mode">✓</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 发现模式设置 -->
+                    <div class="settings-section">
+                        <h4 class="section-title-small">发现模式</h4>
+                        <div class="ai-mode-option"
+                             v-for="mode in ['normal', 'small']"
+                             :key="'discovery-' + mode"
+                             :class="{ active: personalFMStore.mode === mode }"
+                             @click="selectDiscoveryMode(mode)">
+                            <div class="mode-info">
+                                <div class="mode-name">{{ getDiscoveryModeName(mode) }}</div>
+                                <div class="mode-description">{{ getDiscoveryModeDescription(mode) }}</div>
+                            </div>
+                            <div class="mode-selector">
+                                <span v-if="personalFMStore.mode === mode">✓</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed, onUpdated } from "vue";
+import { ref, onMounted, computed, onUpdated, watch } from "vue";
 import { get } from '../utils/request';
 import ContextMenu from '../components/ContextMenu.vue';
 import { useRoute,useRouter } from 'vue-router';
 import { getCover } from '../utils/utils';
+import { MoeAuthStore } from '../stores/store';
+import { usePersonalFMStore } from '../stores/personalFM';
+import { useMusicQueueStore } from '../stores/musicQueue';
 
 const router = useRouter();
 const route = useRoute();
+const MoeAuth = MoeAuthStore();
+const personalFMStore = usePersonalFMStore();
+
 const songs = ref([]);
 const special_list = ref([]);
 const isLoading = ref(true);
@@ -170,6 +232,9 @@ const toggleMode = () => {
 const flyingNotes = ref([]);
 let noteId = 0;
 
+// 喜欢歌单id
+const likePlaylistId = ref(null)
+
 const playFM = async (event) => {
     try {
         const playButton = event.currentTarget;
@@ -212,6 +277,8 @@ const playFM = async (event) => {
 };
 
 onMounted(() => {
+    // 获取localstorage值
+    likePlaylistId.value = MoeAuth.isAuthenticated?localStorage.getItem('likeListId'):null
     recommend();
     playlist();
 });
@@ -232,6 +299,14 @@ onUpdated(() => {
                 query: { global_collection_id: route.query.listid }
             });
         }
+    }
+})
+
+watch(() => MoeAuth.isAuthenticated, (newVal) => {
+    if (newVal) {
+        likePlaylistId.value = localStorage.getItem('likeListId');
+    }else{
+        likePlaylistId.value = null
     }
 })
 
@@ -262,6 +337,116 @@ const addAllSongsToQueue = () => {
         author: song.author_name,
         timelen: song.time_length
     })));
+};
+
+// 启动私人FM
+const startPersonalFM = async () => {
+    try {
+        // 添加飞行动画效果
+        const note = {
+            id: noteId++,
+            style: {
+                '--start-x': '50%',
+                '--start-y': '50%',
+                'left': '0',
+                'top': '0'
+            }
+        };
+        flyingNotes.value.push(note);
+        setTimeout(() => {
+            flyingNotes.value = flyingNotes.value.filter(n => n.id !== note.id);
+        }, 1500);
+
+        // 启用私人FM模式
+        personalFMStore.enableFM();
+        
+        // 获取当前播放歌曲信息，用于API参数
+        const currentSong = props.playerControl?.currentSong || {};
+        
+        // 获取私人FM歌曲
+        await personalFMStore.fetchFMSongs(currentSong);
+        
+        // 如果有可播放的歌曲，将所有歌曲添加到播放列表
+        if (personalFMStore.songs.length > 0) {
+            // 清空当前播放列表
+            const musicQueueStore = useMusicQueueStore();
+            musicQueueStore.clearQueue();
+            
+            // 将所有私人FM歌曲添加到播放列表，使用addSongToQueueOnly避免封面抖动
+            for (const song of personalFMStore.songs) {
+                await props.playerControl.addSongToQueueOnly(
+                    song.hash,
+                    song.name,
+                    song.cover,
+                    song.author,
+                    song.timelen
+                );
+            }
+            
+            // 播放第一首歌
+            if (personalFMStore.songs.length > 0) {
+                const firstSong = personalFMStore.songs[0];
+                // 使用playFMSong函数，避免触发私人FM退出逻辑
+                await props.playerControl.playFMSong(
+                    firstSong.hash,
+                    firstSong.name,
+                    firstSong.cover,
+                    firstSong.author
+                );
+            }
+        }
+    } catch (error) {
+        console.error('启动私人FM出错:', error);
+    }
+};
+
+// FM设置相关
+const showFMSettingsModal = ref(false);
+
+const showFMSettings = () => {
+    showFMSettingsModal.value = true;
+};
+
+const getAIModeName = (mode) => {
+    switch (mode) {
+        case 0: return 'Alpha';
+        case 1: return 'Beta';
+        case 2: return 'Gamma';
+        default: return 'Alpha';
+    }
+};
+
+const getAIModeDescription = (mode) => {
+    switch (mode) {
+        case 0: return 'Alpha：根据口味推荐相似歌曲';
+        case 1: return 'Beta：根据风格推荐相似歌曲';
+        case 2: return 'Gamma：智能推荐模式';
+        default: return 'Alpha：根据口味推荐相似歌曲';
+    }
+};
+
+const selectAIMode = (mode) => {
+    personalFMStore.setSongPoolId(mode);
+};
+
+const selectDiscoveryMode = (mode) => {
+    personalFMStore.setMode(mode);
+};
+
+const getDiscoveryModeName = (mode) => {
+    switch (mode) {
+        case 'normal': return '发现';
+        case 'small': return '小众';
+        default: return '发现';
+    }
+};
+
+const getDiscoveryModeDescription = (mode) => {
+    switch (mode) {
+        case 'normal': return '发现：根据你的喜好推荐歌曲';
+        case 'small': return '小众：推荐小众风格的歌曲';
+        default: return '发现：根据你的喜好推荐歌曲';
+    }
 };
 
 </script>
@@ -812,5 +997,195 @@ const addAllSongsToQueue = () => {
 .playlist-icon img {
     width: 100%;
     height: 100%;
+}
+
+/* FM设置相关样式 */
+.fm-settings {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.fm-mode-indicator {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    backdrop-filter: blur(5px);
+}
+
+.fm-settings-btn {
+    background: rgba(255, 255, 255, 0.2);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(5px);
+}
+
+.fm-settings-btn:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+/* FM设置模态框样式 */
+.fm-settings-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(5px);
+}
+
+.fm-settings-content {
+    background: white;
+    border-radius: 15px;
+    width: 90%;
+    max-width: 500px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.fm-settings-header {
+    background: linear-gradient(135deg, var(--primary-color), #8ff2ff);
+    color: white;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.fm-settings-header h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: bold;
+}
+
+.close-btn {
+    background: none;
+    border: none;
+    color: white;
+    font-size: 18px;
+    cursor: pointer;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background 0.3s ease;
+}
+
+.close-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+}
+
+.fm-settings-body {
+    padding: 20px;
+}
+
+.settings-section {
+    margin-bottom: 25px;
+}
+
+.settings-section:last-child {
+    margin-bottom: 0;
+}
+
+.section-title-small {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 15px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #eee;
+}
+
+.ai-mode-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+    margin-bottom: 10px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: 2px solid transparent;
+}
+
+.ai-mode-option:hover {
+    background: #f5f5f5;
+}
+
+.ai-mode-option.active {
+    background: linear-gradient(135deg, rgba(74, 144, 226, 0.1), rgba(143, 242, 255, 0.1));
+    border-color: var(--primary-color);
+}
+
+.mode-info {
+    flex: 1;
+}
+
+.mode-name {
+    font-size: 16px;
+    font-weight: bold;
+    color: var(--primary-color);
+    margin-bottom: 5px;
+}
+
+.mode-description {
+    font-size: 14px;
+    color: #666;
+    line-height: 1.4;
+}
+
+.mode-selector {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+}
+
+.ai-mode-option.active .mode-selector {
+    border-color: var(--primary-color);
+    background: var(--primary-color);
+    color: white;
+}
+
+.mode-selector i {
+    font-size: 12px;
 }
 </style>

@@ -1,15 +1,37 @@
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { get } from '../../utils/request';
 import { MoeAuthStore } from '../../stores/store';
+import { usePersonalFMStore } from '../../stores/personalFM';
 
 
 export default function useSongQueue(t, musicQueueStore, queueList = null) {
-    const currentSong = ref({ name: '', author: '', img: '', url: '', hash: '' });
+    const personalFMStore = usePersonalFMStore();
+
+    // 当前歌曲状态
+    const currentSong = ref({
+        hash: '',
+        name: '',
+        author: '',
+        img: '',
+        url: '',
+        timeLength: 0
+    });
     const NextSong = ref([]);
     const timeoutId = ref(null);
 
     // 添加歌曲到队列并播放
     const addSongToQueue = async (hash, name, img, author, isReset = true) => {
+        // 如果是私人FM模式，检查是否是FM列表中的歌曲
+        if (personalFMStore.isEnabled) {
+            const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === hash);
+            if (!isFMSong) {
+                console.log('[SongQueue] 检测到非私人FM歌曲添加，退出私人FM模式');
+                personalFMStore.disableFM();
+            } else {
+                console.log('[SongQueue] 播放私人FM列表中的歌曲，保持私人FM模式');
+            }
+        }
+
         const currentSongHash = currentSong.value.hash;
 
         if (typeof window !== 'undefined' && typeof window.electron !== 'undefined') {
@@ -124,6 +146,17 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
 
     // 添加云盘歌曲到播放列表
     const addCloudMusicToQueue = async (hash, name, author, timeLength, cover, isReset = true) => {
+        // 如果是私人FM模式，检查是否是FM列表中的歌曲
+        if (personalFMStore.isEnabled) {
+            const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === hash);
+            if (!isFMSong) {
+                console.log('[SongQueue] 检测到非私人FM云盘歌曲添加，退出私人FM模式');
+                personalFMStore.disableFM();
+            } else {
+                console.log('[SongQueue] 播放私人FM列表中的云盘歌曲，保持私人FM模式');
+            }
+        }
+
         const currentSongHash = currentSong.value.hash;
         if (typeof window !== 'undefined' && typeof window.electron !== 'undefined') {
             window.electron.ipcRenderer.send('set-tray-title', name + ' - ' + author);
@@ -255,6 +288,12 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
 
     // 添加歌单到播放列表
     const addPlaylistToQueue = async (info, append = false) => {
+        // 如果不是私人FM模式下的歌单添加，则退出私人FM模式
+        if (personalFMStore.isEnabled) {
+            console.log('[SongQueue] 检测到歌单添加，退出私人FM模式');
+            personalFMStore.disableFM();
+        }
+
         let songs = [];
         if (!append) {
             musicQueueStore.clearQueue();
@@ -285,6 +324,12 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
 
     // 批量添加云盘歌曲到播放列表
     const addCloudPlaylistToQueue = async (songs, append = false) => {
+        // 如果不是私人FM模式下的云盘歌单添加，则退出私人FM模式
+        if (personalFMStore.isEnabled) {
+            console.log('[SongQueue] 检测到云盘歌单添加，退出私人FM模式');
+            personalFMStore.disableFM();
+        }
+
         let queueSongs = [];
         if (!append) {
             musicQueueStore.clearQueue();
@@ -425,10 +470,98 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
         return response;
     }
 
+    // 添加歌曲到队列但不播放（用于批量添加，避免封面抖动）
+    const addSongToQueueOnly = async (hash, name, img, author, timelen) => {
+        try {
+            console.log('[SongQueue] 添加歌曲到队列（不播放）:', hash, name);
+            
+            // 注意：在addSongToQueueOnly函数中不检查私人FM模式
+            // 因为这个函数主要用于私人FM模式下批量添加歌曲
+            
+            const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+            const data = {
+                hash: hash
+            };
+
+            // 根据用户设置确定请求参数
+            const MoeAuth = typeof MoeAuthStore === 'function' ? MoeAuthStore() : { isAuthenticated: false };
+            if (!MoeAuth.isAuthenticated) data.free_part = 1;
+            if (MoeAuth.isAuthenticated && settings?.quality === 'lossless' && settings?.qualityCompatibility === 'off') data.quality = 'flac';
+            if (MoeAuth.isAuthenticated && settings?.quality === 'hires' && settings?.qualityCompatibility === 'off') data.quality = 'high';
+
+            const response = await get('/song/url', data);
+            if (response.status !== 1) {
+                console.error('[SongQueue] 获取音乐URL失败:', response);
+                return null; // 返回null表示添加失败
+            }
+
+            if (response.extName == 'mp4') {
+                console.log('[SongQueue] 歌曲格式为MP4，尝试获取其他格式');
+                return addSongToQueueOnly(hash, name, img, author, timelen);
+            }
+
+            // 设置URL
+            let url = null;
+            if (response.url && response.url[0]) {
+                url = response.url[0];
+                console.log('[SongQueue] 获取到音乐URL:', url);
+            } else {
+                console.error('[SongQueue] 未获取到音乐URL');
+                return null; // 返回null表示添加失败
+            }
+
+            // 创建歌曲对象
+            const song = {
+                id: musicQueueStore.queue.length + 1,
+                hash: hash,
+                name: name,
+                img: img,
+                author: author,
+                timeLength: timelen || response.timeLength || 0,
+                url: url,
+                // 响度规格化参数
+                loudnessNormalization: {
+                    volume: response.volume || 0,
+                    volumeGain: response.volume_gain || 0,
+                    volumePeak: response.volume_peak || 1
+                }
+            };
+
+            // 检查歌曲是否已存在
+            const existingSongIndex = musicQueueStore.queue.findIndex(s => s.hash === hash);
+            if (existingSongIndex === -1) {
+                // 添加到队列末尾
+                musicQueueStore.addSong(song);
+                console.log('[SongQueue] 歌曲已添加到队列:', song.name);
+                
+                // 在私人FM模式下，检查队列长度并删除最前面的歌曲
+                if (personalFMStore.isEnabled && musicQueueStore.queue.length > 20) {
+                    const removeCount = musicQueueStore.queue.length - 20;
+                    console.log(`[SongQueue] 私人FM模式下，删除最前面的${removeCount}首歌曲，保持队列长度为20`);
+                    musicQueueStore.queue.splice(0, removeCount);
+                    
+                    // 重新设置歌曲ID
+                    musicQueueStore.queue.forEach((s, index) => {
+                        s.id = index + 1;
+                    });
+                }
+                
+                return song;
+            } else {
+                console.log('[SongQueue] 歌曲已存在于队列中:', song.name);
+                return musicQueueStore.queue[existingSongIndex];
+            }
+        } catch (error) {
+            console.error('[SongQueue] 添加歌曲到队列出错:', error);
+            return null; // 返回null表示添加失败
+        }
+    };
+
     return {
         currentSong,
         NextSong,
         addSongToQueue,
+        addSongToQueueOnly,
         addCloudMusicToQueue,
         addLocalMusicToQueue,
         addLocalPlaylistToQueue,
