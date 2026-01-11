@@ -1464,6 +1464,53 @@ defineExpose({
         audio.pause();
         playing.value = false;
         
+        // 检查私人FM缓存中是否已有该歌曲的URL
+        const cachedSong = personalFMStore.songs.find(song => song.hash === hash);
+        if (cachedSong && cachedSong.url) {
+            console.log('[PlayerControl] 使用私人FM缓存中的URL:', hash);
+            const song = {
+                hash,
+                name,
+                img,
+                author,
+                timeLength: cachedSong.timelen,
+                url: cachedSong.url
+            };
+            await playSong(song);
+            
+            // 保存FM歌曲信息到本地存储
+            personalFMStore.saveLastFMSong(song);
+            
+            return { song };
+        }
+        
+        // 检查URL缓存中是否有该歌曲
+        if (personalFMStore.urlCache[hash]) {
+            const cachedUrl = personalFMStore.urlCache[hash];
+            // 检查缓存是否过期
+            if (Date.now() - cachedUrl.timestamp < 3600000) {
+                console.log('[PlayerControl] 使用URL缓存中的URL:', hash);
+                const song = {
+                    hash,
+                    name,
+                    img,
+                    author,
+                    timeLength: cachedUrl.timelen || 0,
+                    url: cachedUrl.url
+                };
+                await playSong(song);
+                
+                // 保存FM歌曲信息到本地存储
+                personalFMStore.saveLastFMSong(song);
+                
+                return { song };
+            } else {
+                // 缓存过期，删除
+                delete personalFMStore.urlCache[hash];
+                console.log('[PlayerControl] URL缓存过期，删除:', hash);
+            }
+        }
+        
         // 直接获取歌曲URL，不使用addSongToQueue避免退出私人FM模式
         try {
             const settings = JSON.parse(localStorage.getItem('settings') || '{}');
@@ -1489,6 +1536,13 @@ defineExpose({
                 
                 // 保存FM歌曲信息到本地存储
                 personalFMStore.saveLastFMSong(song);
+                
+                // 将获取到的URL添加到私人FM缓存
+                personalFMStore.urlCache[hash] = {
+                    url: response.url[0],
+                    timestamp: Date.now()
+                };
+                console.log('[PlayerControl] 缓存新URL到urlCache:', hash);
                 
                 return { song };
             } else {

@@ -35,3 +35,4 @@ pnpm-workspace.yaml
 vite.config.js*
 
 plugins/extensions/*
+package-lock.json

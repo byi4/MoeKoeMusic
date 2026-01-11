@@ -357,14 +357,8 @@ const startPersonalFM = async () => {
             flyingNotes.value = flyingNotes.value.filter(n => n.id !== note.id);
         }, 1500);
 
-        // 启用私人FM模式
-        personalFMStore.enableFM();
-        
-        // 获取当前播放歌曲信息，用于API参数
-        const currentSong = props.playerControl?.currentSong || {};
-        
-        // 获取私人FM歌曲
-        await personalFMStore.fetchFMSongs(currentSong);
+        // 启用私人FM模式（这会自动加载第一批歌曲）
+        await personalFMStore.enableFM();
         
         // 如果有可播放的歌曲，将所有歌曲添加到播放列表
         if (personalFMStore.songs.length > 0) {
