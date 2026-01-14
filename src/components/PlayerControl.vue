@@ -1441,6 +1441,11 @@ onUnmounted(() => {
 // 对外暴露接口
 defineExpose({
     playing,
+    pause: () => {
+        clearAutoSwitchTimer();
+        if (!audio.paused) audio.pause();
+        playing.value = false;
+    },
     addSongToQueue: async (hash, name, img, author) => {
         clearAutoSwitchTimer();
 
