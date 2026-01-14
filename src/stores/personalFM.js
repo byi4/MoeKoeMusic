@@ -11,6 +11,7 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
         maxSongs: 20, // 最大歌曲数量
         songPoolId: 0, // AI模式：0：Alpha 根据口味推荐相似歌曲, 1：Beta 根据风格推荐相似歌曲, 2：Gamma
         mode: 'normal', // 获取模式：normal：发现，small： 小众
+        m_type: 0, // 音乐类型：根据mode自动设置，normal→0，small→3
         urlCache: {}, // 使用普通对象缓存歌曲URL，避免重复请求
         maxCacheSize: 5, // 最大缓存歌曲数量
         preloadThreshold: 5, // 剩余5首歌时开始预加载
@@ -144,6 +145,7 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                     mode: this.mode, // 使用设置的模式
                     action: 'play', // 默认动作
                     song_pool_id: this.songPoolId, // 使用设置的AI模式
+                    m_type: this.m_type, // 根据mode自动设置的音乐类型
                     remain_songcnt: 0, // 根据API文档，默认值为0
                     timestamp: Date.now(), // 添加时间戳
                     // 移除is_overplay参数
@@ -326,6 +328,7 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                     mode: this.mode,
                     action: 'garbage', // 标记为不喜欢
                     song_pool_id: this.songPoolId,
+                    m_type: this.m_type, // 根据mode自动设置的音乐类型
                     remain_songcnt: 0, // 根据API文档，默认值为0
                     timestamp: Date.now(), // 添加时间戳
                     // 移除is_overplay参数
@@ -381,7 +384,13 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
         // 设置获取模式
         setMode(mode) {
             this.mode = mode;
-            console.log('[PersonalFM] 设置获取模式为:', mode);
+            // 根据mode自动设置m_type
+            if (mode === 'normal') {
+                this.m_type = 0;
+            } else if (mode === 'small') {
+                this.m_type = 3;
+            }
+            console.log('[PersonalFM] 设置获取模式为:', mode, 'm_type为:', this.m_type);
         },
         
         // 清理过期的URL缓存
@@ -464,8 +473,9 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                     mode: this.mode,
                     action: 'play',
                     song_pool_id: this.songPoolId,
-                    remain_songcnt: 0,
-                    timestamp: Date.now(),
+                    m_type: this.m_type, // 根据mode自动设置的音乐类型
+                    remain_songcnt: 0, // 根据API文档，默认值为0
+                    timestamp: Date.now(), // 添加时间戳
                     is_overplay: 1
                 };
                 
@@ -530,7 +540,7 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
             {
                 key: 'PersonalFM',
                 storage: localStorage,
-                paths: ['isEnabled', 'currentIndex', 'songPoolId', 'mode'],
+                paths: ['isEnabled', 'currentIndex', 'songPoolId', 'mode', 'm_type'],
             },
         ],
         beforeRestore: (context) => {

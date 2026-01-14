@@ -13,7 +13,7 @@ module.exports = (params, useAxios) => {
     recommend_source_locked: 0,
     song_pool_id: Number(params?.song_pool_id || 0),
     callerid: 0,
-    m_type: 1,
+    m_type: Number(params?.m_type || 0),
     platform: params?.platform || 'ios',
     area_code: 1,
     remain_songcnt: Number(params?.remain_songcnt || 0),
