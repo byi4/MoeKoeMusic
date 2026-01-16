@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia';
 import { get } from '../utils/request';
 import { useMusicQueueStore } from './musicQueue';
+import { MoeAuthStore } from './store';
 
 export const usePersonalFMStore = defineStore('PersonalFM', {
     state: () => ({
@@ -224,10 +225,19 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                         }
                     }
                     
-                    // 获取歌曲URL
-                    const urlResponse = await get('/song/url', {
+                    // 获取歌曲URL，添加音质参数
+                    const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+                    const data = {
                         hash: song.hash
-                    });
+                    };
+                    
+                    // 根据用户设置确定请求参数
+                    const MoeAuth = typeof MoeAuthStore === 'function' ? MoeAuthStore() : { isAuthenticated: false };
+                    if (!MoeAuth.isAuthenticated) data.free_part = 1;
+                    if (MoeAuth.isAuthenticated && settings?.quality === 'lossless' && settings?.qualityCompatibility === 'off') data.quality = 'flac';
+                    if (MoeAuth.isAuthenticated && settings?.quality === 'hires' && settings?.qualityCompatibility === 'off') data.quality = 'high';
+                    
+                    const urlResponse = await get('/song/url', data);
                     
                     if (urlResponse.status === 1 && urlResponse.url && urlResponse.url[0]) {
                         // 检查缓存是否已满，如果满了则清空
@@ -500,10 +510,19 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                                 }
                             }
                             
-                            // 获取歌曲URL
-                            const urlResponse = await get('/song/url', {
+                            // 获取歌曲URL，添加音质参数
+                            const settings = JSON.parse(localStorage.getItem('settings') || '{}');
+                            const data = {
                                 hash: song.hash
-                            });
+                            };
+                            
+                            // 根据用户设置确定请求参数
+                            const MoeAuth = typeof MoeAuthStore === 'function' ? MoeAuthStore() : { isAuthenticated: false };
+                            if (!MoeAuth.isAuthenticated) data.free_part = 1;
+                            if (MoeAuth.isAuthenticated && settings?.quality === 'lossless' && settings?.qualityCompatibility === 'off') data.quality = 'flac';
+                            if (MoeAuth.isAuthenticated && settings?.quality === 'hires' && settings?.qualityCompatibility === 'off') data.quality = 'high';
+                            
+                            const urlResponse = await get('/song/url', data);
                             
                             if (urlResponse.status === 1 && urlResponse.url && urlResponse.url[0]) {
                                 // 检查缓存是否已满，如果满了则清空
