@@ -1635,9 +1635,23 @@ defineExpose({
             
             // 根据用户设置确定请求参数
             const MoeAuth = typeof MoeAuthStore === 'function' ? MoeAuthStore() : { isAuthenticated: false };
-            if (!MoeAuth.isAuthenticated) data.free_part = 1;
-            if (MoeAuth.isAuthenticated && settings?.quality === 'lossless' && settings?.qualityCompatibility === 'off') data.quality = 'flac';
-            if (MoeAuth.isAuthenticated && settings?.quality === 'hires' && settings?.qualityCompatibility === 'off') data.quality = 'high';
+            const isAuth = !!MoeAuth.isAuthenticated;
+
+            if (!isAuth) {
+                data.free_part = 1;
+            } else {
+                const qualityMap = {
+                    normal: '128',
+                    high: '320',
+                    lossless: 'flac',
+                    hires: 'high',
+                    viper: 'viper_clear',
+                };
+
+                const q = settings?.quality;
+                const mapped = qualityMap[q];
+                if (mapped) data.quality = mapped;
+            }
             
             const response = await get('/song/url', data);
             if (response.status === 1 && response.url && response.url[0]) {
