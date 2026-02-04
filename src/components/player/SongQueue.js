@@ -21,6 +21,7 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
 
     // 添加歌曲到队列并播放
     const addSongToQueue = async (hash, name, img, author, isReset = true) => {
+        if(!hash) return { error: true };
         // 如果是私人FM模式，检查是否是FM列表中的歌曲
         if (personalFMStore.isEnabled) {
             const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === hash);
@@ -33,7 +34,6 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
         }
 
         const currentSongHash = currentSong.value.hash;
-
         if (typeof window !== 'undefined' && typeof window.electron !== 'undefined') {
             window.electron.ipcRenderer.send('set-tray-title', name + ' - ' + author);
         }
