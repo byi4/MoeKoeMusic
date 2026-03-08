@@ -77,13 +77,14 @@
     ```
     git clone https://github.com/iAJue/MoeKoeMusic.git
     cd MoeKoeMusic
+    git submodule update --init --recursive
     docker compose up -d &
     ```
 
     2. ~~方式二：使用docker-compose一键安装 （镜像暂未上传官方）~~
     
     ```
-    docker run -d --name MoeKoeMusic -p 8080:8080 iajue/moekoe-music:latest
+    docker run -d --name MoeKoeMusic -p 8080:8080 -p 6521:6521 -e PORT=6521 -e platform=lite iajue/moekoe-music:latest
     ```
 
     3. 方式三：宝塔容器编排
@@ -102,6 +103,9 @@
         build:
           context: .
           dockerfile: Dockerfile
+        environment:
+          - PORT=6521
+          - platform=lite
         ports: # 端口映射
           - "8080:8080"  # 前端服务
           - "6521:6521"  # 接口服务
@@ -233,8 +237,8 @@ npm run build
    ```
    - ARM64架构(ARM v8+): 
    ```
-   npm run build:api:linux-aarch64 //编译API
-   npm run electron:build:linux-aarch64 //编译主程序
+   npm run build:api:linux-arm64 //编译API
+   npm run electron:build:linux-arm64 //编译主程序
    ```
 
 #### 4. 打包所有平台
