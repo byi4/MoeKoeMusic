@@ -51,7 +51,7 @@
                 <div class="playlist-entry gradient-background" @click="startPersonalFM">
                     <div class="playlist-content">
                         <div class="playlist-icon">
-                            <img src="@/assets/images/home/hutao.png" />
+                            <img :src="`./assets/images/home/hutao.png`" />
                         </div>
                         <h3 class="ranking-title">私人FM</h3>
                         <div class="fm-settings">
