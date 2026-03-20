@@ -29,6 +29,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getExtensionsDirectory: () => ipcRenderer.invoke('get-extensions-directory'),
     ensureExtensionsDirectory: () => ipcRenderer.invoke('ensure-extensions-directory'),
     installPluginFromZip: (zipPath) => ipcRenderer.invoke('install-plugin-from-zip', zipPath),
+    installPluginFromUrl: (downloadUrl, extensionId = '', extensionDir = '') => ipcRenderer.invoke('install-plugin-from-url', {
+        downloadUrl,
+        extensionId,
+        extensionDir,
+    }),
     showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),
     openMvWindow: (url) => ipcRenderer.invoke('open-mv-window', url),
 });

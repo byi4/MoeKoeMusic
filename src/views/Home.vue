@@ -6,7 +6,7 @@
                 <div class="radio-card">
                     <div class="radio-left">
                         <div class="disc-container">
-                            <img src="@/assets/images/home/hutao1.png" class="radio-disc">
+                            <img :src="`./assets/images/home/hutao1.png`" class="radio-disc">
                         </div>
                         <div class="decorative-box">
                             <div class="music-bars">
@@ -39,7 +39,7 @@
                     path: '/Ranking'
                 }" class="ranking-entry">
                     <div class="ranking-content">
-                        <img src="@/assets/images/home/hutao2.png" class="ranking-icon">
+                        <img :src="`./assets/images/home/hutao2.png`" class="ranking-icon">
                         <h3 class="ranking-title">排行榜</h3>
                         <div class="ranking-description">发现你的专属好歌</div>
                     </div>
@@ -71,7 +71,7 @@
         </div>
 
         <h2 class="section-title">
-            <img src="@/assets/images/home/mama.png" class="mama" @click="addAllSongsToQueue">
+            <img :src="`./assets/images/home/mama.png`" class="mama" @click="addAllSongsToQueue">
             {{ $t('mei-ri-tui-jian') }}
         </h2>
         <div v-if="isLoading" class="skeleton-loader">

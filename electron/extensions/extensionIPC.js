@@ -2,8 +2,11 @@ import { ipcMain, shell, BrowserWindow, dialog } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import log from 'electron-log';
+import { fileURLToPath } from 'url';
 import extensionManager from './extensionManager.js';
 import { bindExternalLinkHandler } from '../services/externalLinkHandler.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // 获取插件图标数据
 function getExtensionIconData(extension, extensionPath) {
@@ -60,6 +63,7 @@ export function registerExtensionIPC() {
                 
                 return {
                     id: ext.id,
+                    pluginId: ext.manifest?.plugin_id || scannedExt?.manifest?.plugin_id || '',
                     name: ext.name,
                     directory: scannedExt?.directory || '',
                     version: ext.version,
@@ -69,7 +73,8 @@ export function registerExtensionIPC() {
                     authorUrl: authorUrl,
                     permissions: ext.manifest?.permissions || [],
                     iconData: iconData,
-                    moeKoeAdapted: ext.manifest?.moekoe === true || scannedExt?.manifest?.moekoe === true
+                    moeKoeAdapted: ext.manifest?.moekoe === true || scannedExt?.manifest?.moekoe === true,
+                    minversion: ext.manifest?.minversion || scannedExt?.manifest?.minversion || ''
                 };
             });
             
@@ -129,9 +134,11 @@ export function registerExtensionIPC() {
                 width: 400,
                 height: 600,
                 webPreferences: {
+                    preload: path.join(__dirname, '../preload.cjs'),
                     nodeIntegration: false,
                     contextIsolation: true,
                     enableRemoteModule: false,
+                    sandbox: false,
                     webSecurity: false // 允许加载插件内容
                 },
                 title: extensionName || '插件弹窗',
@@ -227,7 +234,22 @@ export function registerExtensionIPC() {
             return { success: false, message: error.message };
         }
     });
-
+    
+    // 从URL安装插件
+    ipcMain.handle('install-plugin-from-url', async (event, payload = {}) => {
+        try {
+            const result = await extensionManager.installPluginFromUrl(
+                payload.downloadUrl,
+                payload.extensionId,
+                payload.extensionDir
+            );
+            return result;
+        } catch (error) {
+            log.error('Failed to install remote plugin:', error);
+            return { success: false, message: error.message };
+        }
+    });
+    
     // 显示文件选择对话框
     ipcMain.handle('show-open-dialog', async (event, options) => {
         try {
@@ -275,7 +297,10 @@ export function unregisterExtensionIPC() {
         'uninstall-extension',
         'validate-extension',
         'get-extensions-directory',
-        'ensure-extensions-directory'
+        'ensure-extensions-directory',
+        'install-plugin-from-zip',
+        'install-plugin-from-url',
+        'show-open-dialog'
     ];
 
     channels.forEach(channel => {
