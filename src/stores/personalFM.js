@@ -3,6 +3,25 @@ import { get } from '../utils/request';
 import { useMusicQueueStore } from './musicQueue';
 import { MoeAuthStore } from './store';
 
+const QUALITY_LEVELS = ['128', '320', 'flac', 'high', 'viper_atmos', 'viper_clear', 'viper_tape'];
+const QUALITY_LABELS = {
+    '128': '标准',
+    '320': '高品',
+    flac: 'FLAC',
+    high: 'Hi-Res',
+    viper_atmos: '全景声',
+    viper_clear: '超清',
+    viper_tape: '母带'
+};
+
+const normalizeQuality = (quality) => {
+    return QUALITY_LEVELS.includes(quality) ? quality : '128';
+};
+
+const getFallbackChain = (quality) => QUALITY_LEVELS.slice(0, QUALITY_LEVELS.indexOf(normalizeQuality(quality)) + 1).reverse();
+
+const getQualityLabel = (quality) => QUALITY_LABELS[quality] || '';
+
 export const usePersonalFMStore = defineStore('PersonalFM', {
     state: () => ({
         isEnabled: false, // 是否启用私人FM模式
@@ -238,17 +257,10 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                     if (!isAuth) {
                         data.free_part = 1;
                     } else {
-                        const qualityMap = {
-                            normal: '128',
-                            high: '320',
-                            lossless: 'flac',
-                            hires: 'high',
-                            viper: 'viper_clear',
-                        };
-
-                        const q = settings?.quality;
-                        const mapped = qualityMap[q];
-                        if (mapped) data.quality = mapped;
+                        const q = normalizeQuality(settings?.quality);
+                        const fallbackChain = getFallbackChain(q);
+                        // 使用最高优先级音质
+                        data.quality = fallbackChain[0];
                     }
                     
                     const urlResponse = await get('/song/url', data);
@@ -537,17 +549,10 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                             if (!isAuth) {
                                 data.free_part = 1;
                             } else {
-                                const qualityMap = {
-                                    normal: '128',
-                                    high: '320',
-                                    lossless: 'flac',
-                                    hires: 'high',
-                                    viper: 'viper_clear',
-                                };
-
-                                const q = settings?.quality;
-                                const mapped = qualityMap[q];
-                                if (mapped) data.quality = mapped;
+                                const q = normalizeQuality(settings?.quality);
+                                const fallbackChain = getFallbackChain(q);
+                                // 使用最高优先级音质
+                                data.quality = fallbackChain[0];
                             }
                             
                             const urlResponse = await get('/song/url', data);
