@@ -17,11 +17,10 @@
                 <i v-else class="fas fa-music"></i>
             </div>
             <div class="song-info" @click="toggleLyrics(currentSong.hash, currentTime)">
-                <div class="song-title" @click.stop="searchSong(currentSong.name)">{{ currentSong?.name || "MoeKoeMusic" }}
-<span v-if="personalFMStore.isEnabled" class="fm-indicator">私人FM</span>
-</div>
                 <div class="song-title-row">
-                    <div class="song-title" @click.stop="searchSong(currentSong.name)">{{ currentSong?.name || "MoeKoeMusic" }}</div>
+                    <div class="song-title" @click.stop="searchSong(currentSong.name)">{{ currentSong?.name || "MoeKoeMusic" }}
+                      <span v-if="personalFMStore.isEnabled" class="fm-indicator">私人FM</span>
+                    </div>
                     <div v-if="currentSong?.qualityLabel" class="quality-menu-wrapper" @click.stop>
                         <button
                             type="button"

@@ -168,7 +168,6 @@ export const usePersonalFMStore = defineStore('PersonalFM', {
                     m_type: this.m_type, // 根据mode自动设置的音乐类型
                     remain_songcnt: 0, // 根据API文档，默认值为0
                     timestamp: Date.now(), // 添加时间戳
-                    // 移除is_overplay参数
                     is_overplay: 1
                 };
                 
