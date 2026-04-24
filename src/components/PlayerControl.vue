@@ -530,8 +530,7 @@ const updateCurrentTime = throttle(() => {
     }
 
     if (!hasLyricsData && isElectron() && (desktopLyricsEnabled || statusBarLyricsEnabled || savedConfig?.apiMode === 'on')) {
-        if (isLyrics === false) return;
-        getCurrentLyrics();
+        retryMissingLyrics();
     }
 
     localStorage.setItem('player_progress', audio.currentTime);
@@ -576,7 +575,7 @@ let autoSwitchTimer = null;
 let lyricScrollTimer = null;
 // 自动切换计数器和最大重试次数
 let autoSwitchCount = 0;
-const maxAutoSwitchRetries = 3;
+const maxAutoSwitchRetries = 5;
 
 // 处理自动切换逻辑的函数
 const handleAutoSwitch = () => {
@@ -619,11 +618,41 @@ const restoreLyricsScroll = throttle(() => {
 
 // 获取歌词的节流函数
 let isLyrics;
-const getCurrentLyrics = throttle(async() => {
-    if (currentSong.value.hash) {
-        isLyrics = await getLyrics(currentSong.value.hash);
+let pendingLyricsHash = '';
+let pendingLyricsPromise = null;
+let lastLyricsRetryAt = 0;
+const getCurrentLyrics = async () => {
+    const hash = currentSong.value.hash;
+    if (!hash) return false;
+
+    if (pendingLyricsHash === hash && pendingLyricsPromise) {
+        return pendingLyricsPromise;
     }
-}, 1000);
+
+    pendingLyricsHash = hash;
+    pendingLyricsPromise = (async () => {
+        isLyrics = await getLyrics(hash);
+        return isLyrics;
+    })();
+
+    try {
+        return await pendingLyricsPromise;
+    } finally {
+        if (pendingLyricsHash === hash) {
+            pendingLyricsHash = '';
+            pendingLyricsPromise = null;
+        }
+    }
+};
+const retryMissingLyrics = () => {
+    if (isLyrics === false || pendingLyricsPromise) return;
+
+    const now = Date.now();
+    if (now - lastLyricsRetryAt < 1000) return;
+
+    lastLyricsRetryAt = now;
+    getCurrentLyrics();
+};
 
 // 计算属性
 const formattedCurrentTime = computed(() => formatTime(currentTime.value));
@@ -700,6 +729,10 @@ const playSong = async (song) => {
                 playing.value = true;
             }
         } catch (playError) {
+            if(playError.name.includes('NotSupportedError')) {
+                console.error('[PlayerControl] 播放失败，浏览器不支持该音频格式,正在降低音质重试:', playError);
+                return;
+            }
             console.warn('[PlayerControl] 播放被中断，尝试重新播放:', playError);
             // 等待一小段时间后重试
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -723,6 +756,9 @@ const playSong = async (song) => {
 
         // 清空歌词数据
         lyricsData.value = [];
+        originalLyrics.value = '';
+        isLyrics = undefined;
+        lastLyricsRetryAt = 0;
         if(song?.isLocal) return;
         // 保存当前歌曲到本地存储
         localStorage.setItem('current_song', JSON.stringify(currentSong.value));
@@ -767,7 +803,10 @@ const togglePlayPause = async () => {
                     addLocalMusicToQueue(song);
                 } else {
                     console.log('[PlayerControl] 歌曲没有URL，重新获取');
-                    addSongToQueue(song.hash, song.name, song.img, song.author);
+                    const result = await addSongToQueue(song.hash, song.name, song.img, song.author);
+                    if (result && result.song) {
+                        playSong(result.song);
+                    }
                     return;
                 }
             } else {
@@ -1067,7 +1106,7 @@ const playSongFromQueue = async (direction) => {
             console.log('[PlayerControl] 成功获取歌曲URL，开始播放:', result.song.name);
             await playSong(result.song);
         } else if (result && result.shouldPlayNext) {
-            console.log('[PlayerControl] 云盘歌曲无法播放');
+            console.log('[PlayerControl] 歌曲无法播放');
             handleAutoSwitch();
         } else {
             console.error('[PlayerControl] 无法获取歌曲URL');
@@ -1586,11 +1625,14 @@ onMounted(() => {
         if (isElectron()) window.electron.ipcRenderer.send('play-pause-action', playing.value, audio.currentTime);
     });
 
-    audio.addEventListener('error', (e) => {
+    audio.addEventListener('error', async (e) => {
         console.log('[PlayerControl] 音频错误代码:', audio.error?.code);
         console.error('[PlayerControl] 音频错误:', e);
         if(audio.error?.code == 4){
-            addSongToQueue(currentSong.value.hash, currentSong.value.name, currentSong.value.img, currentSong.value.author);
+            const result = await addSongToQueue(currentSong.value.hash, currentSong.value.name, currentSong.value.img, currentSong.value.author, true, 'flac');
+            if (result && result.song) {
+                playSong(result.song);
+            }
         }else{
             window.$modal.alert(t('yin-pin-jia-zai-shi-bai'));
         }
@@ -1878,7 +1920,7 @@ defineExpose({
         if (result && result.song) {
             await playSong(result.song);
     } else if (result && result.shouldPlayNext) {
-        console.log('[PlayerControl] 云盘歌曲无法播放');
+        console.log('[PlayerControl] 歌曲无法播放');
         handleAutoSwitch();
         }
         return result;
@@ -1961,5 +2003,5 @@ const onQueueLocalSongAdd = async (item) => {
 </script>
 
 <style scoped>
-@import '@/assets/style/PlayerControl.css';
+@import '@/assets/style/PlayerControl.scss';
 </style>

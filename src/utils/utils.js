@@ -5,6 +5,7 @@ export const applyColorTheme = (theme) => {
     if (theme === 'blue') {
         colors = {
             '--primary-color': '#4A90E2',
+            '--primary-color-rgb': '74, 144, 226',
             '--secondary-color': '#AEDFF7',
             '--background-color': '#E8F4FA',
             '--background-color-secondary': '#D9EEFA',
@@ -18,6 +19,7 @@ export const applyColorTheme = (theme) => {
     } else if (theme === 'green') {
         colors = {
             '--primary-color': '#34C759',
+            '--primary-color-rgb': '52, 199, 89',
             '--secondary-color': '#A7F3D0',
             '--background-color': '#E5F9F0',
             '--background-color-secondary': '#D0F5E6',
@@ -31,10 +33,11 @@ export const applyColorTheme = (theme) => {
     } else if (theme === 'orange') {
         colors = {
             '--primary-color': '#ff6b6b',
+            '--primary-color-rgb': '255, 107, 107',
             '--secondary-color': '#FFB6C1',
             '--background-color': '#FFF0F5',
             '--background-color-secondary': '#FFE6EC',
-            '--color-primary': '#ea33e4',
+            '--color-primary': '#f36868',
             '--color-primary-light': 'rgba(255, 107, 107, 0.1)',
             '--border-color': '#FFDCE3',
             '--hover-color': '#FFE9EF',
@@ -44,10 +47,11 @@ export const applyColorTheme = (theme) => {
     } else {
         colors = {
             '--primary-color': '#FF69B4',
+            '--primary-color-rgb': '255, 105, 180',
             '--secondary-color': '#FFB6C1',
             '--background-color': '#FFF0F5',
             '--background-color-secondary': '#FFE6F0',
-            '--color-primary': '#ea33e4',
+            '--color-primary': '#f167ac',
             '--color-primary-light': 'rgba(255, 105, 180, 0.1)',
             '--border-color': '#FFD9E6',
             '--hover-color': '#FFE9F2',
