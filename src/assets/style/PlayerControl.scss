@@ -836,9 +836,11 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
 
 .cover-fade-enter-to,
 .cover-fade-leave-from {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+}
 
-
-/* Ë½ÈËFMÖ¸Ê¾Æ÷ÑùÊ½ */
+/* FMæŒ‡ç¤ºå™¨æ ·å¼ */
 .fm-indicator {
     display: inline-block;
     background: linear-gradient(135deg, #ff6b6b, #ff8e53);
