@@ -8,7 +8,7 @@
                     <div class="search-box">
                         <i class="fas fa-search"></i>
                         <input v-model.trim="searchKeyword" type="text" placeholder="搜索歌曲、歌手、专辑、歌单"
-                            @focus="handleSearchFocus" @keydown.down.prevent="highlightNextSuggestion"
+                            @focus="handleSearchFocus" autofocus @keydown.down.prevent="highlightNextSuggestion"
                             @keydown.up.prevent="highlightPrevSuggestion"
                             @keydown.enter.prevent="submitSearch(searchKeyword, true)" />
                         <button @click="submitSearch(searchKeyword)">搜索</button>
@@ -108,7 +108,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { get } from '../utils/request';
 
@@ -318,6 +318,12 @@ const handleClickOutside = (event) => {
     }
 };
 
+const focusSearchInput = () => {
+    nextTick(() => {
+        searchAreaRef.value?.querySelector('input')?.focus();
+    });
+};
+
 watch(() => route.query.q, (value) => {
     searchKeyword.value = getRouteKeyword(value);
 });
@@ -344,6 +350,7 @@ watch(switchableBoards, (value) => {
 
 onMounted(() => {
     fetchHotBoards();
+    focusSearchInput();
     document.addEventListener('click', handleClickOutside);
 });
 
@@ -359,17 +366,35 @@ onUnmounted(() => {
     --page-surface-strong: rgba(255, 255, 255, 0.94);
     --page-line: rgba(var(--primary-color-rgb), 0.14);
     --page-line-strong: rgba(var(--primary-color-rgb), 0.24);
-    --page-shadow: 0 24px 60px rgba(132, 63, 92, 0.16);
-    --page-shadow-soft: 0 18px 40px rgba(132, 63, 92, 0.1);
+    --page-shadow: 0 24px 60px rgba(var(--primary-color-rgb), 0.16);
+    --page-shadow-soft: 0 18px 40px rgba(var(--primary-color-rgb), 0.1);
     --page-text-muted: rgba(51, 51, 51, 0.68);
+    --page-accent-soft: rgba(var(--primary-color-rgb), 0.78);
+    --page-accent-strong: rgba(var(--primary-color-rgb), 0.96);
+    --page-accent-shadow: rgba(var(--primary-color-rgb), 0.28);
     min-height: calc(100vh - 90px);
     padding: 32px 24px 48px;
     position: relative;
     overflow: hidden;
     background:
         radial-gradient(circle at top left, rgba(var(--primary-color-rgb), 0.2), transparent 30%),
-        radial-gradient(circle at top right, rgba(255, 185, 214, 0.55), transparent 26%),
-        linear-gradient(180deg, #fff8fb 0%, #fff2f7 46%, #fffafc 100%);
+        radial-gradient(circle at top right, rgba(var(--primary-color-rgb), 0.14), transparent 26%),
+        linear-gradient(180deg, rgba(var(--primary-color-rgb), 0.05) 0%, rgba(var(--primary-color-rgb), 0.09) 46%, rgba(var(--primary-color-rgb), 0.03) 100%);
+
+    &:is(.dark .recommended-search-page) {
+        --page-surface: rgba(24, 24, 28, 0.88);
+        --page-surface-strong: rgba(30, 30, 36, 0.96);
+        --page-line: rgba(255, 255, 255, 0.08);
+        --page-line-strong: rgba(255, 255, 255, 0.16);
+        --page-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+        --page-shadow-soft: 0 18px 40px rgba(0, 0, 0, 0.24);
+        --page-text-muted: rgba(255, 255, 255, 0.62);
+        --page-accent-shadow: rgba(var(--primary-color-rgb), 0.2);
+        background:
+            radial-gradient(circle at top left, rgba(var(--primary-color-rgb), 0.18), transparent 34%),
+            radial-gradient(circle at top right, rgba(var(--primary-color-rgb), 0.12), transparent 30%),
+            linear-gradient(180deg, rgba(12, 13, 16, 0.98) 0%, rgba(18, 20, 24, 0.96) 48%, rgba(11, 12, 15, 0.98) 100%);
+    }
 }
 
 .search-hero,
@@ -397,6 +422,12 @@ onUnmounted(() => {
     backdrop-filter: blur(16px);
     position: relative;
     z-index: 1;
+
+    &:is(.dark .search-panel) {
+        background: linear-gradient(135deg, rgba(30, 30, 36, 0.96), rgba(22, 23, 28, 0.9));
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+    }
 }
 
 .boards-shell,
@@ -419,6 +450,11 @@ onUnmounted(() => {
     font-weight: 800;
     letter-spacing: 0.14em;
     text-transform: uppercase;
+
+    &:is(.dark .search-tag) {
+        background: linear-gradient(135deg, rgba(var(--primary-color-rgb), 0.1), rgba(255, 214, 228, 0.12));
+        color: rgba(255, 255, 255, 0.88);
+    }
 }
 
 .search-box {
@@ -433,6 +469,13 @@ onUnmounted(() => {
     box-shadow:
         inset 0 1px 0 rgba(255, 255, 255, 0.65),
         0 16px 32px rgba(208, 110, 154, 0.12);
+
+    &:is(.dark .search-box) {
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.04),
+            0 16px 32px rgba(0, 0, 0, 0.22);
+    }
 
     i {
         width: 20px;
@@ -451,6 +494,14 @@ onUnmounted(() => {
             color: rgba(51, 51, 51, 0.42);
         }
 
+        .dark &::placeholder {
+            color: rgba(255, 255, 255, 0.36);
+        }
+
+        &:is(.dark input) {
+            color: rgba(255, 255, 255, 0.94);
+        }
+
         &:focus {
             outline: none;
         }
@@ -461,17 +512,17 @@ onUnmounted(() => {
         border: none;
         border-radius: 18px;
         padding: 12px 18px;
-        background: linear-gradient(135deg, #ff7cab, #ff5e90) !important;
+        background: linear-gradient(135deg, var(--page-accent-soft), var(--page-accent-strong)) !important;
         color: #fff !important;
         font-size: 14px;
         font-weight: 700;
         cursor: pointer;
-        box-shadow: 0 14px 26px rgba(255, 105, 151, 0.28);
+        box-shadow: 0 14px 26px var(--page-accent-shadow);
         transition: transform 0.22s ease, box-shadow 0.22s ease, opacity 0.22s ease;
 
         &:hover {
             transform: translateY(-2px);
-            box-shadow: 0 18px 32px rgba(255, 105, 151, 0.34);
+            box-shadow: 0 18px 32px rgba(var(--primary-color-rgb), 0.34);
             opacity: 0.98;
         }
     }
@@ -495,6 +546,12 @@ onUnmounted(() => {
     border: 1px solid rgba(255, 255, 255, 0.92);
     box-shadow: 0 24px 50px rgba(132, 63, 92, 0.16);
     backdrop-filter: blur(20px);
+
+    &:is(.dark .suggestion-dropdown) {
+        background: rgba(24, 24, 30, 0.96);
+        border-color: rgba(255, 255, 255, 0.08);
+        box-shadow: 0 24px 50px rgba(0, 0, 0, 0.28);
+    }
 }
 
 .suggestion-state {
@@ -536,6 +593,9 @@ onUnmounted(() => {
     color: var(--text-color);
     font-size: 14px;
     font-weight: 700;
+    &:is(.dark .suggestion-keyword) {
+        color: rgba(255, 255, 255, 0.94);
+    }
 }
 
 .suggestion-reason {
@@ -561,6 +621,12 @@ onUnmounted(() => {
     font-weight: 600;
     cursor: pointer;
     transition: transform 0.22s ease, background-color 0.22s ease, border-color 0.22s ease;
+
+    &:is(.dark .quick-tag) {
+        background: rgba(255, 255, 255, 0.05) !important;
+        border-color: rgba(var(--primary-color-rgb), 0.2) !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+    }
 
     &:hover {
         transform: translateY(-2px);
@@ -624,6 +690,11 @@ onUnmounted(() => {
     cursor: pointer;
     transition: transform 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, color 0.22s ease;
 
+    &:is(.dark .switcher-button) {
+        background: rgba(255, 255, 255, 0.05) !important;
+        color: rgba(255, 255, 255, 0.88) !important;
+    }
+
     &:hover {
         transform: translateX(4px);
         background: rgba(var(--primary-color-rgb), 0.1) !important;
@@ -634,13 +705,23 @@ onUnmounted(() => {
         background: linear-gradient(135deg, rgba(var(--primary-color-rgb), 0.16), rgba(255, 255, 255, 0.88)) !important;
         color: var(--primary-color) !important;
         border-color: rgba(var(--primary-color-rgb), 0.26) !important;
-        box-shadow: 0 12px 24px rgba(208, 110, 154, 0.12);
+        box-shadow: 0 12px 24px rgba(var(--primary-color-rgb), 0.12);
+
+        &:is(.dark .switcher-button.active) {
+            background: linear-gradient(135deg, rgba(var(--primary-color-rgb), 0.28), rgba(255, 255, 255, 0.08)) !important;
+            color: #fff !important;
+            box-shadow: 0 12px 24px rgba(0, 0, 0, 0.22);
+        }
     }
 }
 
 .board-card {
     border-radius: 24px;
-    background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(255, 246, 249, 0.84));
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.96), rgba(var(--primary-color-rgb), 0.08));
+
+    &:is(.dark .board-card) {
+        background: linear-gradient(160deg, rgba(30, 30, 36, 0.96), rgba(var(--primary-color-rgb), 0.14));
+    }
 }
 
 .fixed-board {
@@ -653,12 +734,17 @@ onUnmounted(() => {
     justify-content: space-between;
     gap: 16px;
     margin-bottom: 16px;
+    margin-left: 10px;
 
     h2 {
         margin: 10px 0 0;
         font-size: 26px;
         color: var(--text-color);
         line-height: 1.1;
+
+        &:is(.dark .board-header h2) {
+            color: rgba(255, 255, 255, 0.94);
+        }
     }
 }
 
@@ -696,11 +782,19 @@ onUnmounted(() => {
     text-align: left;
     transition: transform 0.22s ease, border-color 0.22s ease, background-color 0.22s ease, box-shadow 0.22s ease;
 
+    &:is(.dark .rank-item) {
+        background: rgba(255, 255, 255, 0.05) !important;
+    }
+
     &:hover {
         transform: translateY(-2px);
         border-color: rgba(var(--primary-color-rgb), 0.18) !important;
         background: rgba(var(--primary-color-rgb), 0.08) !important;
         box-shadow: 0 14px 28px rgba(208, 110, 154, 0.12);
+
+        .dark & {
+            box-shadow: 0 14px 28px rgba(0, 0, 0, 0.22);
+        }
     }
 }
 
@@ -717,7 +811,7 @@ onUnmounted(() => {
     font-size: 13px;
 
     &.top {
-        background: linear-gradient(135deg, #ff7cab, #ff5e90);
+        background: linear-gradient(135deg, var(--page-accent-soft), var(--page-accent-strong));
         color: #fff;
     }
 }
@@ -733,6 +827,10 @@ onUnmounted(() => {
     font-size: 15px;
     font-weight: 700;
     line-height: 1.35;
+
+    &:is(.dark .rank-keyword) {
+        color: rgba(255, 255, 255, 0.94);
+    }
 }
 
 .rank-meta {

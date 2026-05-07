@@ -1,6 +1,6 @@
 {
   "name": "moekoemusic",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "homepage": "https://github.com/iAJue/MoeKoeMusic",
   "main": "electron/main.js",
   "scripts": {
@@ -109,7 +109,8 @@
       "x64ArchFiles": "*",
       "icon": "build/icons/icon.icns",
       "target": [
-        "dmg"
+        "dmg",
+        "zip"
       ],
       "identity": null,
       "artifactName": "${productName}-${arch}.${ext}",
@@ -132,7 +133,7 @@
         "deb"
       ],
       "category": "Utility",
-      "artifactName": "${productName}.${ext}"
+      "artifactName": "${productName}-${arch}.${ext}"
     }
   },
   "type": "module",

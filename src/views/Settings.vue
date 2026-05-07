@@ -426,6 +426,11 @@ const settingSections = computed(() => [
                 showRefreshHint: true,
                 refreshHintText: t('zhong-qi-hou-sheng-xiao'),
                 helpLink: 'https://music.moekoe.cn/guide/proxy-settings.html'
+            },
+            {
+                key: 'log',
+                label: '日志',
+                customText: '操作'
             }
         ]
     }
@@ -475,7 +480,8 @@ const getItemIcon = (key) => {
         'shortcuts': 'fas fa-keyboard',
         'pwa': 'fas fa-mobile-alt',
         'proxy': 'fas fa-random',
-        'startupPage': 'fas fa-home'
+        'startupPage': 'fas fa-home',
+        log: 'fas fa-file-lines'
     };
     return iconMap[key] || 'fas fa-sliders-h';
 };
@@ -725,7 +731,13 @@ const selectionTypeMap = {
         title: '音频输出设备(实验性)',
         options: []
     },
-
+    log: {
+        title: '日志',
+        options: [
+            { displayText: '打开目录', value: 'open-path' },
+            { displayText: '导出日志', value: 'export-log' },
+        ]
+    }
 };
 
 const showRefreshHint = ref({
@@ -744,6 +756,7 @@ const showRefreshHint = ref({
     proxy: false,
     dataSource: false,
     statusBarLyrics: false,
+    log: false,
 });
 
 const audioOutputDeviceOptions = ref([]);
@@ -843,7 +856,7 @@ const openHelpLink = () => {
 };
 
 const selectOption = async (option) => {
-    const electronFeatures = ['desktopLyrics', 'statusBarLyrics', 'gpuAcceleration', 'minimizeToTray', 'highDpi', 'nativeTitleBar', 'touchBar', 'autoStart', 'startMinimized', 'preventAppSuspension', 'networkMode', 'poxySettings', 'apiMode', 'dataSource', 'statusBarLyrics'];
+    const electronFeatures = ['desktopLyrics', 'statusBarLyrics', 'gpuAcceleration', 'minimizeToTray', 'highDpi', 'nativeTitleBar', 'touchBar', 'autoStart', 'startMinimized', 'preventAppSuspension', 'networkMode', 'poxySettings', 'apiMode', 'dataSource', 'statusBarLyrics', 'log'];
     if (!isElectron() && electronFeatures.includes(selectionType.value)) {
         window.$modal.alert(t('fei-ke-hu-duan-huan-jing-wu-fa-qi-yong'));
         return;
@@ -915,6 +928,26 @@ const selectOption = async (option) => {
             window.dispatchEvent(new CustomEvent('audio-output-device-change', {
                 detail: { deviceId: option.value }
             }));
+        },
+        log: async () => {
+            let result;
+            switch (option.value) {
+                case 'open-path':
+                    result = await window.electronAPI.openLogPath();
+                    break;
+                case 'export-log':
+                    result = await window.electronAPI.exportLog();
+                    break;
+                default:
+                    break;
+            }
+            if (result?.error) {
+                console.error(`日志操作 ${option.value} 失败:`, result.error);
+                window.$modal.alert(`日志操作失败，详细信息请查看控制台`);
+            }
+            if (option.value === 'export-log' && result?.filePath) {
+                await window.$modal.alert(`日志(已脱敏)已导出到:\n${result.filePath}`);
+            }
         }
     };
     await actions[selectionType.value]?.();
@@ -946,8 +979,9 @@ const isElectron = () => {
     return typeof window !== 'undefined' && typeof window.electron !== 'undefined';
 };
 const saveSettings = () => {
+    const ignoreKeys = ['log'];
     const settingsToSave = Object.fromEntries(
-        Object.entries(selectedSettings.value).map(([key, setting]) => [key, setting.value])
+        Object.entries(selectedSettings.value).map(([key, setting]) => !ignoreKeys.includes(key) && [key, setting.value] || [])
     );
     settingsToSave.shortcuts = shortcuts.value;
     localStorage.setItem('settings', JSON.stringify(settingsToSave));
@@ -1597,6 +1631,9 @@ $shadow-medium: rgba(0, 0, 0, 0.18);
     box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
     animation: slideIn 0.3s ease-in-out;
     position: relative;
+    max-height: 80%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 
     h3 {
         font-size: 20px;
