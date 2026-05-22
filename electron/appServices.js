@@ -708,7 +708,7 @@ export function setThumbarButtons(mainWindow, isPlaying = false, isFM = false) {
     const buttons = [
         {
             tooltip: isFM ? '不喜欢' : t('prev-track'),
-            icon: getIconPath(isFM ? 'dislike.png' : 'prev.png'),
+            icon: getIconPath(isFM ? 'heart-crack.png' : 'prev.png'),
             click: () => {
                 if (isFM) {
                     mainWindow.webContents.send('fm-dislike');

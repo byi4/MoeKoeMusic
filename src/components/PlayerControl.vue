@@ -48,7 +48,7 @@
             </div>
             <div class="controls">
                 <button class="control-btn" :title="personalFMStore.isEnabled ? '不喜欢' : t('shang-yi-shou')" @click="personalFMStore.isEnabled ? dislikeCurrentSongAndPlayNext() : playSongFromQueue('previous')">
-                    <i :class="personalFMStore.isEnabled ? 'fa-solid fa-thumbs-down' : 'fas fa-step-backward'"></i>
+                    <i :class="personalFMStore.isEnabled ? 'fa-solid fa-heart-crack' : 'fas fa-step-backward'"></i>
                 </button>
                 <button class="control-btn" :title="t('zan-ting-bo-fang')" @click="togglePlayPause">
                     <i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>
@@ -161,7 +161,7 @@
                             <i class="fas fa-heart"></i>
                         </button>
                         <button class="control-btn" :title="personalFMStore.isEnabled ? '不喜欢' : t('shang-yi-shou')" @click="personalFMStore.isEnabled ? dislikeCurrentSongAndPlayNext() : playSongFromQueue('previous')">
-                            <i :class="personalFMStore.isEnabled ? 'fa-solid fa-thumbs-down' : 'fas fa-step-backward'"></i>
+                            <i :class="personalFMStore.isEnabled ? 'fa-solid fa-heart-crack' : 'fas fa-step-backward'"></i>
                         </button>
                         <button class="control-btn" :title="t('zan-ting-bo-fang')" @click="togglePlayPause">
                             <i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>
