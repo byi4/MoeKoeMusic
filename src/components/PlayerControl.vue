@@ -47,8 +47,8 @@
                 <div class="artist" @click.stop="searchSong(currentSong.author)">{{ currentSong?.author || "MoeJue" }}</div>
             </div>
             <div class="controls">
-                <button class="control-btn" :title="t('shang-yi-shou')" @click="playSongFromQueue('previous')">
-                    <i class="fas fa-step-backward"></i>
+                <button class="control-btn" :title="personalFMStore.isEnabled ? '不喜欢' : t('shang-yi-shou')" @click="personalFMStore.isEnabled ? dislikeCurrentSongAndPlayNext() : playSongFromQueue('previous')">
+                    <i :class="personalFMStore.isEnabled ? 'fa-solid fa-thumbs-down' : 'fas fa-step-backward'"></i>
                 </button>
                 <button class="control-btn" :title="t('zan-ting-bo-fang')" @click="togglePlayPause">
                     <i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>
@@ -160,8 +160,8 @@
                         <button class="control-btn like-btn" :title="t('wo-xi-huan')" @click="playlistSelect.toLike()">
                             <i class="fas fa-heart"></i>
                         </button>
-                        <button class="control-btn" :title="t('shang-yi-shou')" @click="playSongFromQueue('previous')">
-                            <i class="fas fa-step-backward"></i>
+                        <button class="control-btn" :title="personalFMStore.isEnabled ? '不喜欢' : t('shang-yi-shou')" @click="personalFMStore.isEnabled ? dislikeCurrentSongAndPlayNext() : playSongFromQueue('previous')">
+                            <i :class="personalFMStore.isEnabled ? 'fa-solid fa-thumbs-down' : 'fas fa-step-backward'"></i>
                         </button>
                         <button class="control-btn" :title="t('zan-ting-bo-fang')" @click="togglePlayPause">
                             <i :class="playing ? 'fas fa-pause' : 'fas fa-play'"></i>
@@ -322,109 +322,14 @@ const switchQuality = async (option) => {
 const onSongEnd = async () => {
     if (currentPlaybackModeIndex.value == 2) return;
     
-    // 如果是私人FM模式，处理特殊逻辑
+    // 私人FM模式：播完自动切下一首
     if (personalFMStore.isEnabled) {
-        // 同步私人FM索引：找到当前歌曲在私人FM列表中的位置
-        const currentSongIndexInFM = personalFMStore.songs.findIndex(song => song.hash === currentSong.value.hash);
-        if (currentSongIndexInFM !== -1) {
-            personalFMStore.currentIndex = currentSongIndexInFM;
-        }
-        
-        // 标记当前歌曲播放完成
         personalFMStore.markSongCompleted();
-        
-        // 检查是否是最后一首歌曲，如果是则立即获取新歌曲
-        const isLastSong = personalFMStore.currentIndex >= personalFMStore.songs.length - 1;
-        
-        if (isLastSong) {
-            console.log('[PlayerControl] 私人FM到达最后一首，请求新歌曲');
-            
-            // 添加重试机制
-            let retryCount = 0;
-            const maxRetries = 3;
-            let hasNewSongs = false;
-            
-            // 记录当前歌曲数量
-            const beforeCount = personalFMStore.songs.length;
-            
-            while (retryCount < maxRetries && !hasNewSongs) {
-                try {
-                    // 记录当前索引和歌曲列表
-                    const beforeIndex = personalFMStore.currentIndex;
-                    const beforeSongs = [...personalFMStore.songs];
-                    
-                    await personalFMStore.fetchFMSongs(currentSong.value);
-                    
-                    // 检查是否获取到了新歌曲
-                    // 如果列表长度变化，或者当前索引变化，或者歌曲内容变化，都认为获取到了新歌曲
-                    const hasLengthChanged = personalFMStore.songs.length !== beforeSongs.length;
-                    const hasIndexChanged = personalFMStore.currentIndex !== beforeIndex;
-                    const hasContentChanged = personalFMStore.songs.length !== beforeSongs.length ||
-                        personalFMStore.songs.some((song, index) =>
-                            index >= beforeSongs.length || song.hash !== beforeSongs[index]?.hash
-                        );
-                    
-                    if (hasLengthChanged || hasIndexChanged || hasContentChanged) {
-                        hasNewSongs = true;
-                        console.log(`[PlayerControl] 私人FM第${retryCount + 1}次尝试成功获取新歌曲`);
-                        console.log(`[PlayerControl] 列表长度变化: ${beforeSongs.length} -> ${personalFMStore.songs.length}`);
-                        console.log(`[PlayerControl] 当前索引变化: ${beforeIndex} -> ${personalFMStore.currentIndex}`);
-                    } else {
-                        retryCount++;
-                        console.log(`[PlayerControl] 私人FM第${retryCount}次尝试未获取到新歌曲，重试中...`);
-                        if (retryCount < maxRetries) {
-                            // 等待一段时间后重试
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                    }
-                } catch (error) {
-                    retryCount++;
-                    console.error(`[PlayerControl] 私人FM第${retryCount}次尝试出错:`, error);
-                    if (retryCount < maxRetries) {
-                        // 等待一段时间后重试
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-            }
-            
-            // 如果重试后仍然没有获取到新歌曲，停止播放但不退出FM模式
-            if (!hasNewSongs) {
-                console.log('[PlayerControl] 私人FM重试失败，没有获取到新歌曲，停止播放，保持FM模式');
-                audio.pause();
-                playing.value = false;
-                // 显示提示信息
-                if (window.$modal) {
-                    window.$modal.alert('私人FM暂时无法获取新歌曲，请稍后再试');
-                }
-                return;
-            }
-            
-            // 将新获取的歌曲添加到播放列表
-            if (personalFMStore.songs.length > personalFMStore.currentIndex) {
-                // 只添加当前索引之后的歌曲（不包括当前正在播放的歌曲）
-                const newSongs = personalFMStore.songs.slice(personalFMStore.currentIndex + 1).map(song => ({
-                    hash: song.hash,
-                    name: song.name,
-                    cover: song.cover,
-                    author: song.author,
-                    timelen: song.timelen
-                }));
-                
-                console.log(`[PlayerControl] 准备添加${newSongs.length}首新歌曲到播放列表（onSongEnd）`);
-                
-                // 使用addSongToQueueOnly添加到播放列表的末尾，避免封面抖动
-                for (const song of newSongs) {
-                    await addSongToQueueOnly(song.hash, song.name, song.cover, song.author, song.timelen);
-                }
-                
-                console.log(`[PlayerControl] 添加了${newSongs.length}首新歌曲到播放列表，当前播放列表长度: ${musicQueueStore.queue.length}`);
-            }
-        }
-        
-        // 获取下一首FM歌曲（在获取新歌曲之后调用）
-        const nextFMSong = personalFMStore.playNext();
+
+        const nextFMSong = await personalFMStore.playNext();
         if (nextFMSong) {
-            // 播放下一首FM歌曲
+            // FM模式：清空队列，只保留当前一首
+            musicQueueStore.clearQueue();
             const result = await addSongToQueue(
                 nextFMSong.hash,
                 nextFMSong.name,
@@ -436,9 +341,9 @@ const onSongEnd = async () => {
                 return;
             }
         }
-        
-        // 如果没有可播放的歌曲，停止播放但不退出FM模式
-        console.log('[PlayerControl] 私人FM没有更多歌曲，停止播放，保持FM模式');
+
+        // 没有更多歌曲
+        console.log('[PlayerControl] 私人FM没有更多歌曲，停止播放');
         audio.pause();
         playing.value = false;
         return;
@@ -837,128 +742,14 @@ const togglePlayPause = async () => {
 const playSongFromQueue = async (direction) => {
     clearAutoSwitchTimer();
     
-    // 如果是私人FM模式且点击下一首
+    // 私人FM模式下点击下一首
     if (personalFMStore.isEnabled && direction === 'next') {
-        // 同步私人FM索引：找到当前歌曲在私人FM列表中的位置
-        const currentSongIndexInFM = personalFMStore.songs.findIndex(song => song.hash === currentSong.value.hash);
-        if (currentSongIndexInFM !== -1) {
-            personalFMStore.currentIndex = currentSongIndexInFM;
-        }
-        
-        // 标记当前歌曲播放完成
         personalFMStore.markSongCompleted();
-        
-        // 检查当前播放的歌曲是否是播放列表中的最后一首
-        const currentIndex = musicQueueStore.queue.findIndex(song => song.hash === currentSong.value.hash);
-        const isLastInQueue = currentIndex === musicQueueStore.queue.length - 1;
-        
-        // 检查是否是私人FM列表的最后一首歌曲
-        const isLastInFMList = personalFMStore.currentIndex >= personalFMStore.songs.length - 1;
-        
-        // 如果是播放列表的最后一首，或者是私人FM列表的最后一首，则获取新歌曲
-        // 但要确保私人FM列表至少有一首歌曲，避免在空列表时请求
-        const shouldFetchNewSongs = (isLastInQueue || isLastInFMList) && personalFMStore.songs.length > 0;
-        
-        console.log('[PlayerControl] 检查是否需要获取新歌曲:', {
-            currentSongHash: currentSong.value.hash,
-            currentIndex,
-            isLastInQueue,
-            isLastInFMList,
-            shouldFetchNewSongs,
-            fmSongsLength: personalFMStore.songs.length,
-            fmCurrentIndex: personalFMStore.currentIndex,
-            queueLength: musicQueueStore.queue.length
-        });
-        
-        if (shouldFetchNewSongs) {
-            console.log('[PlayerControl] 私人FM到达最后一首，请求新歌曲');
-            
-            // 添加重试机制
-            let retryCount = 0;
-            const maxRetries = 3;
-            let hasNewSongs = false;
-            
-            // 记录当前歌曲数量
-            const beforeCount = personalFMStore.songs.length;
-            
-            while (retryCount < maxRetries && !hasNewSongs) {
-                try {
-                    // 记录当前索引和歌曲列表
-                    const beforeIndex = personalFMStore.currentIndex;
-                    const beforeSongs = [...personalFMStore.songs];
-                    
-                    await personalFMStore.fetchFMSongs(currentSong.value);
-                    
-                    // 检查是否获取到了新歌曲
-                    // 如果列表长度变化，或者当前索引变化，或者歌曲内容变化，都认为获取到了新歌曲
-                    const hasLengthChanged = personalFMStore.songs.length !== beforeSongs.length;
-                    const hasIndexChanged = personalFMStore.currentIndex !== beforeIndex;
-                    const hasContentChanged = personalFMStore.songs.length !== beforeSongs.length ||
-                        personalFMStore.songs.some((song, index) =>
-                            index >= beforeSongs.length || song.hash !== beforeSongs[index]?.hash
-                        );
-                    
-                    if (hasLengthChanged || hasIndexChanged || hasContentChanged) {
-                        hasNewSongs = true;
-                        console.log(`[PlayerControl] 私人FM第${retryCount + 1}次尝试成功获取新歌曲`);
-                        console.log(`[PlayerControl] 列表长度变化: ${beforeSongs.length} -> ${personalFMStore.songs.length}`);
-                        console.log(`[PlayerControl] 当前索引变化: ${beforeIndex} -> ${personalFMStore.currentIndex}`);
-                    } else {
-                        retryCount++;
-                        console.log(`[PlayerControl] 私人FM第${retryCount}次尝试未获取到新歌曲，重试中...`);
-                        if (retryCount < maxRetries) {
-                            // 等待一段时间后重试
-                            await new Promise(resolve => setTimeout(resolve, 1000));
-                        }
-                    }
-                } catch (error) {
-                    retryCount++;
-                    console.error(`[PlayerControl] 私人FM第${retryCount}次尝试出错:`, error);
-                    if (retryCount < maxRetries) {
-                        // 等待一段时间后重试
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                    }
-                }
-            }
-            
-            // 如果重试后仍然没有获取到新歌曲，停止播放但不退出FM模式
-            if (!hasNewSongs) {
-                console.log('[PlayerControl] 私人FM重试失败，没有获取到新歌曲，停止播放，保持FM模式');
-                audio.pause();
-                playing.value = false;
-                // 显示提示信息
-                if (window.$modal) {
-                    window.$modal.alert('私人FM暂时无法获取新歌曲，请稍后再试');
-                }
-                return;
-            }
-            
-            // 将新获取的歌曲添加到播放列表
-            if (personalFMStore.songs.length > personalFMStore.currentIndex) {
-                // 只添加当前索引之后的歌曲（不包括当前正在播放的歌曲）
-                const newSongs = personalFMStore.songs.slice(personalFMStore.currentIndex + 1).map(song => ({
-                    hash: song.hash,
-                    name: song.name,
-                    cover: song.cover,
-                    author: song.author,
-                    timelen: song.timelen
-                }));
-                
-                console.log(`[PlayerControl] 准备添加${newSongs.length}首新歌曲到播放列表（playSongFromQueue）`);
-                
-                // 使用addSongToQueueOnly添加到播放列表的末尾，避免封面抖动
-                for (const song of newSongs) {
-                    await addSongToQueueOnly(song.hash, song.name, song.cover, song.author, song.timelen);
-                }
-                
-                console.log(`[PlayerControl] 添加了${newSongs.length}首新歌曲到播放列表，当前播放列表长度: ${musicQueueStore.queue.length}`);
-            }
-        }
-        
-        // 获取下一首FM歌曲（在获取新歌曲之后调用）
-        const nextFMSong = personalFMStore.playNext();
+
+        const nextFMSong = await personalFMStore.playNext();
         if (nextFMSong) {
-            // 播放下一首FM歌曲
+            // FM模式：清空队列，只保留当前一首
+            musicQueueStore.clearQueue();
             const result = await addSongToQueue(
                 nextFMSong.hash,
                 nextFMSong.name,
@@ -970,45 +761,32 @@ const playSongFromQueue = async (direction) => {
                 return;
             }
         }
-        
-        // 如果没有可播放的歌曲，停止播放但不退出FM模式
-        console.log('[PlayerControl] 私人FM没有更多歌曲，停止播放，保持FM模式');
+
+        console.log('[PlayerControl] 私人FM没有更多歌曲，停止播放');
         audio.pause();
         playing.value = false;
         return;
     }
-    
-    // 如果是私人FM模式且点击上一首，不退出FM模式，直接播放上一首FM歌曲
+
+    // 私人FM模式下点击上一首（从历史栈恢复）
     if (personalFMStore.isEnabled && direction === 'previous') {
-        // 同步私人FM索引：找到当前歌曲在私人FM列表中的位置
-        const currentSongIndexInFM = personalFMStore.songs.findIndex(song => song.hash === currentSong.value.hash);
-        if (currentSongIndexInFM !== -1) {
-            personalFMStore.currentIndex = currentSongIndexInFM;
-        }
-        
-        // 如果不是第一首，播放上一首FM歌曲
-        if (personalFMStore.currentIndex > 0) {
-            personalFMStore.currentIndex--;
-            const prevFMSong = personalFMStore.currentSong;
-            if (prevFMSong) {
-                // 播放上一首FM歌曲
-                const result = await addSongToQueue(
-                    prevFMSong.hash,
-                    prevFMSong.name,
-                    prevFMSong.cover,
-                    prevFMSong.author
-                );
-                if (result && result.song) {
-                    await playSong(result.song);
-                    return;
-                }
+        const prevFMSong = personalFMStore.playPrevious();
+        if (prevFMSong) {
+            // FM模式：清空队列，只保留当前一首
+            musicQueueStore.clearQueue();
+            const result = await addSongToQueue(
+                prevFMSong.hash,
+                prevFMSong.name,
+                prevFMSong.cover,
+                prevFMSong.author
+            );
+            if (result && result.song) {
+                await playSong(result.song);
+                return;
             }
         }
-        
-        // 如果是第一首或无法播放，停止播放但不退出FM模式
-        console.log('[PlayerControl] 私人FM已经是第一首，停止播放，保持FM模式');
-        audio.pause();
-        playing.value = false;
+
+        console.log('[PlayerControl] 私人FM没有上一首');
         return;
     }
 
@@ -1068,10 +846,10 @@ const playSongFromQueue = async (direction) => {
     const targetSong = musicQueueStore.queue[targetIndex];
     console.log('[PlayerControl] 开始播放目标歌曲:', targetSong.name);
 
-    // 如果当前歌曲不是私人FM列表中的歌曲，则退出私人FM模式
-    // 但要排除私人FM模式下的上一首/下一首操作和点击播放列表中的FM歌曲
+    // 如果当前歌曲不在FM历史中且FM模式开启，退出FM模式
     if (personalFMStore.isEnabled && targetSong.hash) {
-        const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === targetSong.hash);
+        const isFMSong = personalFMStore.history.some(fmSong => fmSong.hash === targetSong.hash)
+            || (personalFMStore.currentSong && personalFMStore.currentSong.hash === targetSong.hash);
         if (!isFMSong) {
             console.log('[PlayerControl] 检测到非私人FM歌曲播放，退出私人FM模式');
             personalFMStore.disableFM();
@@ -1331,8 +1109,15 @@ const handleKeyDown = (event) => {
 const setupMediaShortcuts = () => {
     if (!isElectron()) return;
 
-    window.electron.ipcRenderer.on('play-previous-track', () => playSongFromQueue('previous'));
+    window.electron.ipcRenderer.on('play-previous-track', () => {
+        if (personalFMStore.isEnabled) {
+            dislikeCurrentSongAndPlayNext();
+        } else {
+            playSongFromQueue('previous');
+        }
+    });
     window.electron.ipcRenderer.on('play-next-track', () => playSongFromQueue('next'));
+    window.electron.ipcRenderer.on('fm-dislike', () => dislikeCurrentSongAndPlayNext());
     window.electron.ipcRenderer.on('volume-up', () => {
         volume.value = Math.min(volume.value + 10, 100);
         changeVolume();
@@ -1562,7 +1347,13 @@ onMounted(() => {
     // 设置媒体会话
     mediaSession.initMediaSession({
         togglePlayPause,
-        playPrevious: () => playSongFromQueue('previous'),
+        playPrevious: () => {
+            if (personalFMStore.isEnabled) {
+                dislikeCurrentSongAndPlayNext();
+            } else {
+                playSongFromQueue('previous');
+            }
+        },
         playNext: () => playSongFromQueue('next'),
         seekBackward: (seekOffset) => {
             if (audio.currentTime > seekOffset) {
@@ -1615,14 +1406,14 @@ onMounted(() => {
         console.log('[PlayerControl] 暂停事件');
         // 暂停时清除SMTC位置状态
         mediaSession.clearPositionState();
-        if (isElectron()) window.electron.ipcRenderer.send('play-pause-action', playing.value, audio.currentTime);
+        if (isElectron()) window.electron.ipcRenderer.send('play-pause-action', playing.value, audio.currentTime, personalFMStore.isEnabled);
     });
 
     audio.addEventListener('play', () => {
         playing.value = true;
         console.log('[PlayerControl] 播放事件');
         if (!lyricsData.value.length) getCurrentLyrics();
-        if (isElectron()) window.electron.ipcRenderer.send('play-pause-action', playing.value, audio.currentTime);
+        if (isElectron()) window.electron.ipcRenderer.send('play-pause-action', playing.value, audio.currentTime, personalFMStore.isEnabled);
     });
 
     audio.addEventListener('error', async (e) => {
@@ -1689,11 +1480,40 @@ onUnmounted(() => {
         window.electron.ipcRenderer.removeAllListeners('toggle-mute');
         window.electron.ipcRenderer.removeAllListeners('toggle-like');
         window.electron.ipcRenderer.removeAllListeners('toggle-mode');
+        window.electron.ipcRenderer.removeAllListeners('fm-dislike');
     }
 
     // 清理键盘事件
     document.removeEventListener('keydown', handleKeyDown);
 });
+
+// 私人FM：不喜欢当前歌曲并切下一首
+const dislikeCurrentSongAndPlayNext = async () => {
+    if (!personalFMStore.isEnabled || !currentSong.value?.hash) return;
+
+    console.log('[PlayerControl] 不喜欢当前FM歌曲:', currentSong.value.name);
+    await personalFMStore.dislikeCurrentSong();
+
+    const nextFMSong = await personalFMStore.playNext();
+    if (nextFMSong) {
+        // FM模式：清空队列，只保留当前一首
+        musicQueueStore.clearQueue();
+        const result = await addSongToQueue(
+            nextFMSong.hash,
+            nextFMSong.name,
+            nextFMSong.cover,
+            nextFMSong.author
+        );
+        if (result && result.song) {
+            await playSong(result.song);
+            return;
+        }
+    }
+
+    console.log('[PlayerControl] 私人FM没有更多歌曲');
+    audio.pause();
+    playing.value = false;
+};
 
 // 对外暴露接口
 defineExpose({
@@ -1719,105 +1539,65 @@ defineExpose({
     // 专门用于私人FM启动时播放歌曲的函数，不会退出私人FM模式
     playFMSong: async (hash, name, img, author) => {
         clearAutoSwitchTimer();
-        
+
         console.log('[PlayerControl] 播放FM歌曲:', name);
         audio.pause();
         playing.value = false;
-        
-        // 检查私人FM缓存中是否已有该歌曲的URL
-        const cachedSong = personalFMStore.songs.find(song => song.hash === hash);
-        if (cachedSong && cachedSong.url) {
-            console.log('[PlayerControl] 使用私人FM缓存中的URL:', hash);
-            const song = {
-                hash,
-                name,
-                img,
-                author,
-                timeLength: cachedSong.timelen,
-                url: cachedSong.url
-            };
-            await playSong(song);
-            
-            // 保存FM歌曲信息到本地存储
-            personalFMStore.saveLastFMSong(song);
-            
-            return { song };
-        }
-        
-        // 检查URL缓存中是否有该歌曲
-        if (personalFMStore.urlCache[hash]) {
-            const cachedUrl = personalFMStore.urlCache[hash];
-            // 检查缓存是否过期
-            if (Date.now() - cachedUrl.timestamp < 3600000) {
-                console.log('[PlayerControl] 使用URL缓存中的URL:', hash);
-                const song = {
-                    hash,
-                    name,
-                    img,
-                    author,
-                    timeLength: cachedUrl.timelen || 0,
-                    url: cachedUrl.url
-                };
-                await playSong(song);
-                
-                // 保存FM歌曲信息到本地存储
-                personalFMStore.saveLastFMSong(song);
-                
-                return { song };
-            } else {
-                // 缓存过期，删除
-                delete personalFMStore.urlCache[hash];
-                console.log('[PlayerControl] URL缓存过期，删除:', hash);
+
+        // 查找歌曲URL：先从store的currentSong，再从pool，再从urlCache
+        let songUrl = null;
+        let songTimelen = 0;
+
+        if (personalFMStore.currentSong && personalFMStore.currentSong.hash === hash && personalFMStore.currentSong.url) {
+            songUrl = personalFMStore.currentSong.url;
+            songTimelen = personalFMStore.currentSong.timelen || 0;
+        } else {
+            const poolSong = personalFMStore.pool.find(s => s.hash === hash);
+            if (poolSong && poolSong.url) {
+                songUrl = poolSong.url;
+                songTimelen = poolSong.timelen || 0;
+            } else if (personalFMStore.urlCache[hash]) {
+                const cachedUrl = personalFMStore.urlCache[hash];
+                if (Date.now() - cachedUrl.timestamp < 3600000) {
+                    songUrl = cachedUrl.url;
+                    songTimelen = cachedUrl.timelen || 0;
+                } else {
+                    delete personalFMStore.urlCache[hash];
+                }
             }
         }
-        
-        // 直接获取歌曲URL，不使用addSongToQueue避免退出私人FM模式
+
+        if (songUrl) {
+            console.log('[PlayerControl] 使用缓存URL播放FM歌曲:', hash);
+            const song = { hash, name, img, author, timeLength: songTimelen, url: songUrl };
+            await playSong(song);
+            personalFMStore.saveLastFMSong(song);
+            return { song };
+        }
+
+        // 无缓存，获取URL
         try {
             const settings = JSON.parse(localStorage.getItem('settings') || '{}');
             const data = { hash };
-            
-            // 根据用户设置确定请求参数
+
             const MoeAuth = typeof MoeAuthStore === 'function' ? MoeAuthStore() : { isAuthenticated: false };
             const isAuth = !!MoeAuth.isAuthenticated;
 
             if (!isAuth) {
                 data.free_part = 1;
             } else {
-                const qualityMap = {
-                    normal: '128',
-                    high: '320',
-                    lossless: 'flac',
-                    hires: 'high',
-                    viper: 'viper_clear',
-                };
-
-                const q = settings?.quality;
-                const mapped = qualityMap[q];
+                const qualityMap = { normal: '128', high: '320', lossless: 'flac', hires: 'high', viper: 'viper_clear' };
+                const mapped = qualityMap[settings?.quality];
                 if (mapped) data.quality = mapped;
             }
-            
+
             const response = await get('/song/url', data);
             if (response.status === 1 && response.url && response.url[0]) {
-                const song = {
-                    hash,
-                    name,
-                    img,
-                    author,
-                    timeLength: response.timeLength,
-                    url: response.url[0]
-                };
+                const song = { hash, name, img, author, timeLength: response.timeLength, url: response.url[0] };
                 await playSong(song);
-                
-                // 保存FM歌曲信息到本地存储
                 personalFMStore.saveLastFMSong(song);
-                
-                // 将获取到的URL添加到私人FM缓存
-                personalFMStore.urlCache[hash] = {
-                    url: response.url[0],
-                    timestamp: Date.now()
-                };
-                console.log('[PlayerControl] 缓存新URL到urlCache:', hash);
-                
+
+                personalFMStore.urlCache[hash] = { url: response.url[0], timestamp: Date.now() };
                 return { song };
             } else {
                 console.error('[PlayerControl] 获取FM歌曲URL失败:', response);

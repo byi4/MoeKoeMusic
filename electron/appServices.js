@@ -704,14 +704,18 @@ export function playStartupSound() {
 }
 
 // 设置任务栏缩略图工具栏
-export function setThumbarButtons(mainWindow, isPlaying = false) {
+export function setThumbarButtons(mainWindow, isPlaying = false, isFM = false) {
     const buttons = [
         {
-            tooltip: t('prev-track'),
-            icon: getIconPath('prev.png'),
+            tooltip: isFM ? '不喜欢' : t('prev-track'),
+            icon: getIconPath(isFM ? 'dislike.png' : 'prev.png'),
             click: () => {
-                mainWindow.webContents.send('play-previous-track');
-                setThumbarButtons(mainWindow, true);
+                if (isFM) {
+                    mainWindow.webContents.send('fm-dislike');
+                } else {
+                    mainWindow.webContents.send('play-previous-track');
+                }
+                setThumbarButtons(mainWindow, true, isFM);
             }
         },
         {
@@ -719,7 +723,7 @@ export function setThumbarButtons(mainWindow, isPlaying = false) {
             icon: getIconPath('pause.png'),
             click: () => {
                 mainWindow.webContents.send('toggle-play-pause');
-                setThumbarButtons(mainWindow, false);
+                setThumbarButtons(mainWindow, false, isFM);
             }
         },
         {
@@ -727,7 +731,7 @@ export function setThumbarButtons(mainWindow, isPlaying = false) {
             icon: getIconPath('next.png'),
             click: () => {
                 mainWindow.webContents.send('play-next-track');
-                setThumbarButtons(mainWindow, true);
+                setThumbarButtons(mainWindow, true, isFM);
             }
         }
     ];
@@ -738,7 +742,7 @@ export function setThumbarButtons(mainWindow, isPlaying = false) {
             icon: getIconPath('play.png'),
             click: () => {
                 mainWindow.webContents.send('toggle-play-pause');
-                setThumbarButtons(mainWindow, true);
+                setThumbarButtons(mainWindow, true, isFM);
             }
         };
     }

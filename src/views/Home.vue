@@ -163,7 +163,6 @@ import { useRoute, useRouter } from 'vue-router';
 import { getCover } from '../utils/utils';
 import { MoeAuthStore } from '../stores/store';
 import { usePersonalFMStore } from '../stores/personalFM';
-import { useMusicQueueStore } from '../stores/musicQueue';
 
 const router = useRouter();
 const route = useRoute();
@@ -351,37 +350,26 @@ const startPersonalFM = async () => {
             flyingNotes.value = flyingNotes.value.filter(n => n.id !== note.id);
         }, 1500);
 
-        // 启用私人FM模式（这会自动加载第一批歌曲）
+        // 启用私人FM模式（自动加载第一批歌曲，随机1首设为currentSong，其余入pool）
         await personalFMStore.enableFM();
-        
-        // 如果有可播放的歌曲，将所有歌曲添加到播放列表
-        if (personalFMStore.songs.length > 0) {
-            // 清空当前播放列表
-            const musicQueueStore = useMusicQueueStore();
-            musicQueueStore.clearQueue();
-            
-            // 将所有私人FM歌曲添加到播放列表，使用addSongToQueueOnly避免封面抖动
-            for (const song of personalFMStore.songs) {
-                await props.playerControl.addSongToQueueOnly(
-                    song.hash,
-                    song.name,
-                    song.cover,
-                    song.author,
-                    song.timelen
-                );
-            }
-            
-            // 播放第一首歌
-            if (personalFMStore.songs.length > 0) {
-                const firstSong = personalFMStore.songs[0];
-                // 使用playFMSong函数，避免触发私人FM退出逻辑
-                await props.playerControl.playFMSong(
-                    firstSong.hash,
-                    firstSong.name,
-                    firstSong.cover,
-                    firstSong.author
-                );
-            }
+
+        // 播放currentSong
+        if (personalFMStore.currentSong) {
+            const song = personalFMStore.currentSong;
+            // 添加到队列并播放
+            await props.playerControl.addSongToQueueOnly(
+                song.hash,
+                song.name,
+                song.cover,
+                song.author,
+                song.timelen
+            );
+            await props.playerControl.playFMSong(
+                song.hash,
+                song.name,
+                song.cover,
+                song.author
+            );
         }
     } catch (error) {
         console.error('启动私人FM出错:', error);

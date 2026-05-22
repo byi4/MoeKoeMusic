@@ -91,14 +91,16 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
     // 添加歌曲到队列并播放
     const addSongToQueue = async (hash, name, img, author, isReset = true, qualityOverride = '', cachedQualityOptions = []) => {
         if(!hash) return { error: true };
-        // 如果是私人FM模式，检查是否是FM列表中的歌曲
+        // 如果是私人FM模式，检查是否是FM歌曲
         if (personalFMStore.isEnabled) {
-            const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === hash);
+            const isFMSong = (personalFMStore.currentSong && personalFMStore.currentSong.hash === hash)
+                || personalFMStore.pool.some(fmSong => fmSong.hash === hash)
+                || personalFMStore.history.some(fmSong => fmSong.hash === hash);
             if (!isFMSong) {
                 console.log('[SongQueue] 检测到非私人FM歌曲添加，退出私人FM模式');
                 personalFMStore.disableFM();
             } else {
-                console.log('[SongQueue] 播放私人FM列表中的歌曲，保持私人FM模式');
+                console.log('[SongQueue] 播放私人FM歌曲，保持私人FM模式');
             }
         }
         const requestId = ++activeSongRequestId;
@@ -297,14 +299,14 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
 
     // 添加云盘歌曲到播放列表
     const addCloudMusicToQueue = async (hash, name, author, timeLength, cover, isReset = true) => {
-        // 如果是私人FM模式，检查是否是FM列表中的歌曲
+        // 如果是私人FM模式，检查是否是FM歌曲
         if (personalFMStore.isEnabled) {
-            const isFMSong = personalFMStore.songs.some(fmSong => fmSong.hash === hash);
+            const isFMSong = (personalFMStore.currentSong && personalFMStore.currentSong.hash === hash)
+                || personalFMStore.pool.some(fmSong => fmSong.hash === hash)
+                || personalFMStore.history.some(fmSong => fmSong.hash === hash);
             if (!isFMSong) {
                 console.log('[SongQueue] 检测到非私人FM云盘歌曲添加，退出私人FM模式');
                 personalFMStore.disableFM();
-            } else {
-                console.log('[SongQueue] 播放私人FM列表中的云盘歌曲，保持私人FM模式');
             }
         }
 
@@ -688,18 +690,6 @@ export default function useSongQueue(t, musicQueueStore, queueList = null) {
                 // 添加到队列末尾
                 musicQueueStore.addSong(song);
                 console.log('[SongQueue] 歌曲已添加到队列:', song.name);
-                
-                // 在私人FM模式下，检查队列长度并删除最前面的歌曲
-                if (personalFMStore.isEnabled && musicQueueStore.queue.length > 20) {
-                    const removeCount = musicQueueStore.queue.length - 20;
-                    console.log(`[SongQueue] 私人FM模式下，删除最前面的${removeCount}首歌曲，保持队列长度为20`);
-                    musicQueueStore.queue.splice(0, removeCount);
-                    
-                    // 重新设置歌曲ID
-                    musicQueueStore.queue.forEach((s, index) => {
-                        s.id = index + 1;
-                    });
-                }
                 
                 return song;
             } else {

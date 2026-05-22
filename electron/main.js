@@ -267,13 +267,13 @@ ipcMain.on('window-drag', (event, { mouseX, mouseY }) => {
     store.set('lyricsWindowPosition', { x: mouseX, y: mouseY });
 })
 
-ipcMain.on('play-pause-action', (event, playing, currentTime) => {
+ipcMain.on('play-pause-action', (event, playing, currentTime, isFM) => {
     const lyricsWindow = mainWindow.lyricsWindow;
     if (lyricsWindow) {
         lyricsWindow.webContents.send('playing-status', playing);
     }
     apiService.updatePlayerState({ isPlaying: playing, currentTime: currentTime });
-    setThumbarButtons(mainWindow, playing);
+    setThumbarButtons(mainWindow, playing, isFM);
 })
 
 ipcMain.on('open-url', (event, url) => {
