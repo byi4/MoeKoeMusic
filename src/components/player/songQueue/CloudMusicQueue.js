@@ -1,0 +1,142 @@
+import { get } from '../../../utils/request';
+import { usePersonalFMStore } from '../../../stores/personalFM';
+
+export default function useCloudMusicQueue(t, musicQueueStore, currentSong, timeoutId) {
+    const personalFMStore = usePersonalFMStore();
+    
+    // 添加云盘歌曲到播放列表
+    const addCloudMusicToQueue = async (hash, name, author, timeLength, cover, isReset = true) => {
+        // 如果是私人FM模式，检查是否是FM歌曲
+        if (personalFMStore.isEnabled) {
+            const isFMSong = (personalFMStore.currentSong && personalFMStore.currentSong.hash === hash)
+                || personalFMStore.pool.some(fmSong => fmSong.hash === hash)
+                || personalFMStore.history.some(fmSong => fmSong.hash === hash);
+            if (!isFMSong) {
+                console.log('[SongQueue] 检测到非私人FM云盘歌曲添加，退出私人FM模式');
+                personalFMStore.disableFM();
+            }
+        }
+        
+        const currentSongHash = currentSong.value.hash;
+        if (typeof window !== 'undefined' && typeof window.electron !== 'undefined') {
+            window.electron.ipcRenderer.send('set-tray-title', name + ' - ' + author);
+        }
+
+        try {
+            clearTimeout(timeoutId.value);
+            currentSong.value.author = author;
+            currentSong.value.name = name;
+            currentSong.value.hash = hash;
+            currentSong.value.img = cover;
+            currentSong.value.qualityLabel = '';
+            currentSong.value.qualityOptions = [];
+
+            console.log('[SongQueue] 获取云盘歌曲:', hash, name);
+
+            const response = await get('/user/cloud/url', { hash });
+            if (response.status !== 1) {
+                console.error('[SongQueue] 获取云盘音乐URL失败:', response);
+                currentSong.value.author = currentSong.value.name = t('huo-qu-yin-le-shi-bai');
+                if (musicQueueStore.queue.length === 0) return { error: true };
+                currentSong.value.author = t('3-miao-hou-zi-dong-qie-huan-xia-yi-shou');
+
+                // 返回需要切换到下一首的标志，而不是直接调用playSongFromQueue
+                return { error: true, shouldPlayNext: true };
+            }
+
+            // 设置URL
+            if (response.data && response.data.url) {
+                currentSong.value.url = response.data.url;
+                console.log('[SongQueue] 获取到云盘音乐URL:', currentSong.value.url);
+            } else {
+                console.error('[SongQueue] 未获取到云盘音乐URL');
+                currentSong.value.author = currentSong.value.name = t('huo-qu-yin-le-shi-bai');
+                return { error: true };
+            }
+
+            // 创建歌曲对象
+            const song = {
+                id: musicQueueStore.queue.length + 1,
+                hash: hash,
+                name: name,
+                author: author,
+                img: cover,
+                timeLength: timeLength || 0,
+                url: response.data.url,
+                isCloud: true
+            };
+
+            // 根据是否需要重置播放位置
+            if (isReset) {
+                localStorage.setItem('player_progress', 0);
+            }
+
+            // 更新队列
+            const existingSongIndex = musicQueueStore.queue.findIndex(song => song.hash === hash);
+            if (existingSongIndex === -1) {
+                const currentIndex = musicQueueStore.queue.findIndex(song => song.hash == currentSongHash);
+                if (currentIndex !== -1) {
+                    musicQueueStore.queue.splice(currentIndex + 1, 0, song);
+                } else {
+                    musicQueueStore.addSong(song);
+                }
+            } else {
+                // 如果歌曲已存在，只更新当前歌曲的信息，不修改队列
+                currentSong.value = song;
+            }
+
+            // 返回歌曲对象
+            return { song };
+        } catch (error) {
+            console.error('[SongQueue] 获取云盘音乐地址出错:', error);
+            currentSong.value.author = currentSong.value.name = t('huo-qu-yin-le-di-zhi-shi-bai');
+            if (musicQueueStore.queue.length === 0) return { error: true };
+            currentSong.value.author = t('3-miao-hou-zi-dong-qie-huan-xia-yi-shou');
+
+            // 返回需要切换到下一首的标志，而不是直接调用playSongFromQueue
+            return { error: true, shouldPlayNext: true };
+        }
+    };
+
+    // 批量添加云盘歌曲到播放列表
+    const addCloudPlaylistToQueue = async (songs, append = false) => {
+        // 如果不是私人FM模式下的云盘歌单添加，则退出私人FM模式
+        if (personalFMStore.isEnabled) {
+            console.log('[SongQueue] 检测到云盘歌单添加，退出私人FM模式');
+            personalFMStore.disableFM();
+        }
+
+        let queueSongs = [];
+        if (!append) {
+            musicQueueStore.clearQueue();
+        } else {
+            queueSongs = [...musicQueueStore.queue];
+        }
+
+        const newSongs = songs.map((song, index) => {
+            return {
+                id: queueSongs.length + index + 1,
+                hash: song.hash,
+                name: song.name,
+                author: song.author,
+                timeLength: song.timelen || 0,
+                url: song.url,
+                isCloud: true
+            };
+        });
+
+        if (append) {
+            queueSongs = [...queueSongs, ...newSongs];
+        } else {
+            queueSongs = newSongs;
+        }
+
+        musicQueueStore.queue = queueSongs;
+        return queueSongs;
+    };
+
+    return {
+        addCloudMusicToQueue,
+        addCloudPlaylistToQueue
+    };
+}
