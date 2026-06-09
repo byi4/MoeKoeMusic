@@ -133,6 +133,7 @@ export function createWindow() {
 }
 
 let lyricsWindow;
+let lyricsTopKeepAliveInterval = null;
 
 export function createLyricsWindow() {
     const { width: screenWidth, height: screenHeight } = screen.getPrimaryDisplay().workAreaSize;
@@ -197,6 +198,11 @@ export function createLyricsWindow() {
     mainWindow.lyricsWindow = lyricsWindow;
     lyricsWindow.on('closed', () => {
         mainWindow.lyricsWindow = null;
+        lyricsWindow = null;
+        if (lyricsTopKeepAliveInterval) {
+            clearInterval(lyricsTopKeepAliveInterval);
+            lyricsTopKeepAliveInterval = null;
+        }
     });
     if (isDev) {
         lyricsWindow.loadURL('http://localhost:8080/#/lyrics');
@@ -212,6 +218,14 @@ export function createLyricsWindow() {
     // 设置窗口置顶级别
     lyricsWindow.setAlwaysOnTop(true, 'screen-saver');
     lyricsWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+
+    // 置顶保活：500ms 轮询重设，防止全屏应用抢走置顶
+    if (lyricsTopKeepAliveInterval) clearInterval(lyricsTopKeepAliveInterval);
+    lyricsTopKeepAliveInterval = setInterval(() => {
+        if (lyricsWindow && !lyricsWindow.isDestroyed()) {
+            lyricsWindow.setAlwaysOnTop(true, 'screen-saver');
+        }
+    }, 500);
 
     // 允许窗口透明
     lyricsWindow.setBackgroundColor('#00000000');
