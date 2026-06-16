@@ -32,6 +32,39 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
     transition: transform 0.6s ease;
 }
 
+.single-lyrics {
+    align-self: center;
+    position: relative;
+    width: 100%;
+    transform: translateY(18vh);
+
+    .line-group {
+        margin-bottom: 0;
+    }
+}
+
+.single-lyric-fade-enter-active,
+.single-lyric-fade-leave-active {
+    transition: opacity 0.18s ease, transform 0.18s ease;
+}
+
+.single-lyric-fade-leave-active {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+}
+
+.single-lyric-fade-enter-from {
+    opacity: 0;
+    transform: translateY(8px);
+}
+
+.single-lyric-fade-leave-to {
+    opacity: 0;
+    transform: translateY(-8px);
+}
+
 .line-group {
     margin-bottom: 12px;
 }
@@ -42,7 +75,7 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
     border-radius: 10px;
     padding: 0 10px;
     width: fit-content;
-    transition: background-color 0.3s ease-in;
+    transition: color 0.24s ease, background-color 0.3s ease-in;
 
     &.left {
         text-align: left;
@@ -99,6 +132,29 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
 
 .highlight {
     background-position: 0%;
+}
+
+.line-highlight {
+    &.translated,
+    &.romanized {
+        color: var(--primary-color);
+    }
+
+    .char {
+        background-position: 0%;
+    }
+}
+
+#lyrics.line-highlight-mode {
+    .char {
+        color: #e3e3e3e8;
+        background: none;
+        transition: color 0.24s ease;
+    }
+
+    .line-highlight .char {
+        color: var(--primary-color);
+    }
 }
 
 .player-container {
@@ -291,7 +347,6 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
     font-size: 0.9em;
     color: $text-light;
     width: auto;
-    max-width: 300px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -462,6 +517,20 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
     background-size: cover;
 }
 
+.lyrics-bg-image {
+    position: absolute;
+    inset: 0;
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: cover;
+    opacity: 0;
+    transition: opacity 1.2s ease;
+
+    &.active {
+        opacity: 1;
+    }
+}
+
 .lyrics-screen {
     position: fixed;
     bottom: 0;
@@ -474,6 +543,11 @@ $shadow-soft: 0 10px 24px rgba(0, 0, 0, 0.12);
     justify-content: space-between;
     padding: 20px;
     background: #1616169c;
+    z-index: 1;
+
+    &.cover-background {
+        backdrop-filter: blur(1px);
+    }
 
     .progress-bar {
         flex-grow: 1;
