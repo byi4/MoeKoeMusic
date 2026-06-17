@@ -114,10 +114,15 @@ export function registerExtensionIPC() {
             // 每次读取插件列表时同步一次，保证授权按钮能立即找到对应插件记录。
             nativeHostManager.syncExtensions(loadedExtensions, scannedExtensions);
             
-            const extensions = loadedExtensions.map(ext => {
-                const scannedExt = scannedExtensions.find(scanned => scanned.name === ext.name);
+            const extensions = scannedExtensions.map(scannedExt => {
+                const ext = loadedExtensions.find(item => {
+                    const loadedPluginId = item.manifest?.plugin_id || '';
+                    return (scannedExt.pluginId && loadedPluginId === scannedExt.pluginId) ||
+                        item.id === scannedExt.extensionId ||
+                        item.name === scannedExt.name;
+                });
                 let iconData = null;
-                const manifestAuthor = ext.manifest?.author ?? scannedExt?.manifest?.author;
+                const manifestAuthor = ext?.manifest?.author ?? scannedExt?.manifest?.author;
                 const authorName = typeof manifestAuthor === 'string'
                     ? manifestAuthor
                     : (manifestAuthor?.name || '');
@@ -126,31 +131,35 @@ export function registerExtensionIPC() {
                     : '';
                 
                 if (scannedExt?.path) {
-                    iconData = getExtensionIconData(ext, scannedExt.path);
+                    iconData = getExtensionIconData(ext || scannedExt, scannedExt.path);
                 }
                 
                 return {
-                    id: ext.id,
-                    pluginId: ext.manifest?.plugin_id || scannedExt?.manifest?.plugin_id || '',
-                    name: ext.name,
+                    id: ext?.id || scannedExt.extensionId || scannedExt.pluginId || scannedExt.directory,
+                    extensionId: ext?.id || scannedExt.extensionId || '',
+                    pluginId: ext?.manifest?.plugin_id || scannedExt.pluginId || scannedExt?.manifest?.plugin_id || scannedExt.directory || '',
+                    name: ext?.name || scannedExt.name,
                     directory: scannedExt?.directory || '',
-                    version: ext.version,
-                    enabled: true,
-                    description: ext.manifest?.description || '',
+                    version: ext?.version || scannedExt.version,
+                    enabled: scannedExt.enabled !== false,
+                    loaded: Boolean(ext),
+                    description: ext?.manifest?.description || scannedExt.description || '',
                     author: authorName,
                     authorUrl: authorUrl,
-                    permissions: ext.manifest?.permissions || [],
+                    permissions: ext?.manifest?.permissions || scannedExt.permissions || [],
                     iconData: iconData,
-                    moeKoeAdapted: ext.manifest?.moekoe === true || scannedExt?.manifest?.moekoe === true,
-                    minversion: ext.manifest?.minversion || scannedExt?.manifest?.minversion || '',
+                    moeKoeAdapted: ext?.manifest?.moekoe === true || scannedExt?.manifest?.moekoe === true,
+                    minversion: ext?.manifest?.minversion || scannedExt?.manifest?.minversion || '',
                     popupPath: scannedExt?.popupPath || '',
                     hasPopup: scannedExt?.hasPopup === true,
-                    nativeHosts: nativeHostManager.describeHosts(
-                        ext.id,
-                        ext.manifest || scannedExt?.manifest || {},
-                        scannedExt?.path || '',
-                        scannedExt?.directory || ''
-                    )
+                    nativeHosts: ext?.id && scannedExt.enabled !== false
+                        ? nativeHostManager.describeHosts(
+                            ext.id,
+                            ext.manifest || scannedExt?.manifest || {},
+                            scannedExt?.path || '',
+                            scannedExt?.directory || ''
+                        )
+                        : []
                 };
             });
             
@@ -192,6 +201,26 @@ export function registerExtensionIPC() {
     });
 
     // 打开插件目录
+    ipcMain.handle('set-extension-enabled', async (event, extensionDir, enabled) => {
+        try {
+            if (getSenderExtensionId(event)) {
+                return { success: false, message: 'Plugins cannot change enabled state' };
+            }
+
+            const result = await extensionManager.setExtensionEnabled(extensionDir, enabled === true);
+            if (result?.success) {
+                if (enabled !== true && result.extension?.id) {
+                    nativeHostManager.stopExtension(result.extension.id, false);
+                }
+                syncNativeHosts();
+            }
+            return result;
+        } catch (error) {
+            log.error('Failed to set plugin enabled state:', error);
+            return { success: false, message: error.message };
+        }
+    });
+
     ipcMain.handle('open-extensions-dir', () => {
         try {
             const extensionsDir = extensionManager.getExtensionsDirectory();
@@ -380,6 +409,7 @@ export function unregisterExtensionIPC() {
         'get-extensions',
         'get-extensions-detailed',
         'reload-extensions',
+        'set-extension-enabled',
         'open-extensions-dir',
         'open-extension-popup',
         'install-extension',

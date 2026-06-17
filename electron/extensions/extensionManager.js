@@ -5,14 +5,82 @@ import log from 'electron-log';
 import { fileURLToPath } from 'url';
 import isDev from 'electron-is-dev';
 import AdmZip from 'adm-zip';
+import Store from 'electron-store';
 import { validateNativeHostManifest } from './nativeHostManager.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const store = new Store();
+const DISABLED_EXTENSIONS_STORE_KEY = 'disabledExtensions';
 
 // Chrome 插件管理 - 根据环境选择正确的路径
 const EXTENSIONS_DIR = !isDev
     ? path.join(app.getPath('userData'), 'extensions')
     : path.join(__dirname, '../../plugins/extensions');
+
+function getDisabledExtensionKeys() {
+    const keys = store.get(DISABLED_EXTENSIONS_STORE_KEY, []);
+    return Array.isArray(keys) ? keys.filter(key => typeof key === 'string' && key.trim()) : [];
+}
+
+function getExtensionStateKey(extensionDir, manifest = {}) {
+    const pluginId = typeof manifest?.plugin_id === 'string' ? manifest.plugin_id.trim() : '';
+    const directory = typeof extensionDir === 'string' ? extensionDir.trim() : '';
+    return pluginId || directory;
+}
+
+export function isExtensionEnabled(extensionDir, manifest = {}) {
+    const key = getExtensionStateKey(extensionDir, manifest);
+    if (!key) {
+        return true;
+    }
+
+    return !getDisabledExtensionKeys().includes(key);
+}
+
+function setExtensionEnabledState(extensionDir, manifest = {}, enabled = true) {
+    const key = getExtensionStateKey(extensionDir, manifest);
+    if (!key) {
+        return;
+    }
+
+    const disabledKeys = getDisabledExtensionKeys().filter(item => item !== key);
+    if (enabled !== true) {
+        disabledKeys.push(key);
+    }
+
+    store.set(DISABLED_EXTENSIONS_STORE_KEY, disabledKeys);
+}
+
+function readManifestFromDirectory(extensionDir) {
+    const safeDir = path.basename(String(extensionDir || '').trim());
+    if (!safeDir) {
+        return null;
+    }
+
+    const manifestPath = path.join(EXTENSIONS_DIR, safeDir, 'manifest.json');
+    if (!fs.existsSync(manifestPath)) {
+        return null;
+    }
+
+    try {
+        return JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    } catch (error) {
+        log.error(`解析插件 ${safeDir} 的 manifest.json 失败:`, error);
+        return null;
+    }
+}
+
+function findLoadedExtensionByInfo(extensionDir, manifest = {}) {
+    const pluginId = typeof manifest?.plugin_id === 'string' ? manifest.plugin_id.trim() : '';
+    const name = manifest?.name || '';
+
+    return getLoadedExtensions().find(extension => {
+        const loadedPluginId = typeof extension.manifest?.plugin_id === 'string'
+            ? extension.manifest.plugin_id.trim()
+            : '';
+        return (pluginId && loadedPluginId === pluginId) || (name && extension.name === name);
+    }) || null;
+}
 
 /**
  * 加载 Chrome 插件
@@ -40,6 +108,11 @@ export async function loadChromeExtensions() {
                     
                     // 验证 manifest 格式
                     if (manifest.manifest_version && manifest.name && manifest.version) {
+                        if (!isExtensionEnabled(extensionDir, manifest)) {
+                            log.info(`跳过已停用插件: ${manifest.name}`);
+                            continue;
+                        }
+
                         loadTasks.push(
                             session.defaultSession.loadExtension(extensionPath, {
                                 allowFileAccess: true
@@ -102,6 +175,9 @@ export async function installExtension(extensionPath) {
         const extension = await session.defaultSession.loadExtension(extensionPath, {
             allowFileAccess: true
         });
+        if (extensionPath && path.dirname(extensionPath) === EXTENSIONS_DIR) {
+            setExtensionEnabledState(path.basename(extensionPath), extension.manifest || {}, true);
+        }
         log.info(`手动安装插件成功: ${extension.name}`);
         return { success: true, extension: { id: extension.id, name: extension.name } };
     } catch (error) {
@@ -119,20 +195,28 @@ export function uninstallExtension(extensionId, extensionDir = '') {
         let removedFromSession = false;
         let removedFiles = false;
         let targetDirPath = '';
+        const safeExtensionDir = path.basename(String(extensionDir || '').trim());
+        const manifest = readManifestFromDirectory(safeExtensionDir);
 
-        targetDirPath = path.join(EXTENSIONS_DIR, path.basename(extensionDir.trim()));
-        try {
-            session.defaultSession.removeExtension(extensionId);
-            removedFromSession = true;
-            log.info(`卸载插件会话: ${extensionId}`);
-        } catch (error) {
-            log.warn(`卸载插件会话失败 ${extensionId}:`, error);
+        targetDirPath = safeExtensionDir ? path.join(EXTENSIONS_DIR, safeExtensionDir) : '';
+        if (extensionId) {
+            try {
+                session.defaultSession.removeExtension(extensionId);
+                removedFromSession = true;
+                log.info(`卸载插件会话: ${extensionId}`);
+            } catch (error) {
+                log.warn(`卸载插件会话失败 ${extensionId}:`, error);
+            }
         }
 
         if (targetDirPath && fs.existsSync(targetDirPath)) {
             fs.rmSync(targetDirPath, { recursive: true, force: true });
             removedFiles = true;
             log.info(`删除插件目录: ${targetDirPath}`);
+        }
+
+        if (safeExtensionDir && manifest) {
+            setExtensionEnabledState(safeExtensionDir, manifest, true);
         }
 
         if (!removedFromSession && !removedFiles) {
@@ -168,6 +252,51 @@ export async function reloadExtensions() {
 /**
  * 获取插件目录路径
  */
+export async function setExtensionEnabled(extensionDir, enabled) {
+    try {
+        const safeExtensionDir = path.basename(String(extensionDir || '').trim());
+        if (!safeExtensionDir) {
+            return { success: false, message: 'Missing plugin directory' };
+        }
+
+        const info = getExtensionInfo(safeExtensionDir);
+        if (info.error) {
+            return { success: false, message: info.error };
+        }
+
+        const loadedExtension = findLoadedExtensionByInfo(safeExtensionDir, info.manifest);
+        setExtensionEnabledState(safeExtensionDir, info.manifest, enabled === true);
+
+        if (enabled === true) {
+            if (loadedExtension) {
+                return {
+                    success: true,
+                    enabled: true,
+                    extension: { id: loadedExtension.id, name: loadedExtension.name }
+                };
+            }
+
+            return await installExtension(info.path);
+        }
+
+        if (loadedExtension) {
+            session.defaultSession.removeExtension(loadedExtension.id);
+            log.info(`Disabled plugin: ${loadedExtension.name}`);
+        }
+
+        return {
+            success: true,
+            enabled: false,
+            extension: loadedExtension
+                ? { id: loadedExtension.id, name: loadedExtension.name }
+                : null
+        };
+    } catch (error) {
+        log.error('Failed to set plugin enabled state:', error);
+        return { success: false, message: error.message };
+    }
+}
+
 export function getExtensionsDirectory() {
     return EXTENSIONS_DIR;
 }
@@ -302,7 +431,7 @@ function getDirectorySize(dirPath) {
  * @param {string} zipPath zip文件路径
  * @returns {Promise<{success: boolean, message: string}>}
  */
-export async function installPluginFromZip(zipPath) {
+export async function installPluginFromZip(zipPath, enabledAfterInstall = true) {
     try {
         const zip = new AdmZip(zipPath);
         const zipEntries = zip.getEntries();
@@ -328,8 +457,10 @@ export async function installPluginFromZip(zipPath) {
 
         // 验证 manifest
         const manifestContent = zip.readAsText(manifestEntry);
+        let parsedManifest = null;
         try {
             const manifest = JSON.parse(manifestContent);
+            parsedManifest = manifest;
             // 直接验证 manifest 对象而不是文件路径
             if (!manifest.manifest_version || !manifest.name || !manifest.version) {
                 return { success: false, message: '清单文件缺少必需字段' };
@@ -381,6 +512,15 @@ export async function installPluginFromZip(zipPath) {
         }
 
         // 加载新插件
+        if (enabledAfterInstall !== true) {
+            setExtensionEnabledState(pluginName, parsedManifest || {}, false);
+            return {
+                success: true,
+                message: 'Plugin installed but disabled',
+                extension: null
+            };
+        }
+
         const result = await installExtension(targetDir);
         if (!result.success) {
             // 如果加载失败，清理已解压的文件
@@ -410,6 +550,8 @@ export async function installPluginFromZip(zipPath) {
  */
 export async function installPluginFromUrl(downloadUrl, extensionId = '', extensionDir = '') {
     const tempZipPath = path.join(app.getPath('temp'), `moekoe-plugin-${Date.now()}.zip`);
+    const previousManifest = readManifestFromDirectory(extensionDir);
+    const wasEnabled = extensionDir ? isExtensionEnabled(extensionDir, previousManifest || {}) : true;
 
     try {
         if (!downloadUrl || typeof downloadUrl !== 'string') {
@@ -440,7 +582,7 @@ export async function installPluginFromUrl(downloadUrl, extensionId = '', extens
             }
         }
 
-        return await installPluginFromZip(tempZipPath);
+        return await installPluginFromZip(tempZipPath, wasEnabled);
     } catch (error) {
         log.error('Failed to install plugin from url:', error);
         return { success: false, message: error.message };
@@ -493,10 +635,15 @@ export function scanExtensions() {
         for (const extensionDir of extensionDirs) {
             const info = getExtensionInfo(extensionDir);
             if (!info.error) {
+                const loadedExtension = findLoadedExtensionByInfo(extensionDir, info.manifest);
                 extensions.push({
                     ...info,
                     directory: extensionDir,
-                    installed: isExtensionInstalled(info.name)
+                    pluginId: getExtensionStateKey(extensionDir, info.manifest),
+                    enabled: isExtensionEnabled(extensionDir, info.manifest),
+                    installed: true,
+                    loaded: Boolean(loadedExtension),
+                    extensionId: loadedExtension?.id || ''
                 });
             } else {
                 log.warn(`插件 ${extensionDir} 信息获取失败:`, info.error);
@@ -531,10 +678,12 @@ export default {
     installExtension,
     uninstallExtension,
     reloadExtensions,
+    setExtensionEnabled,
     getExtensionsDirectory,
     ensureExtensionsDirectory,
     validateManifest,
     getExtensionInfo,
+    isExtensionEnabled,
     formatFileSize,
     scanExtensions,
     installPluginFromZip,
