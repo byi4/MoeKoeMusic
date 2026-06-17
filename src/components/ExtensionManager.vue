@@ -63,11 +63,24 @@
                         </div>
                         <div class="market-status-group">
                             <span class="market-badge installed">已安装</span>
-                            <button v-if="extension.hasPopup" @click="openExtensionPopup(extension.id)" class="extension-btn secondary" :disabled="extensionsLoading">
+                            <span class="market-badge" :class="extension.enabled ? 'enabled' : 'disabled'">
+                                {{ extension.enabled ? '已启用' : '已停用' }}
+                            </span>
+                            <button
+                                @click="toggleExtensionEnabled(extension)"
+                                class="extension-btn"
+                                :class="extension.enabled ? 'secondary' : 'success'"
+                                :disabled="extensionsLoading || extensionEnableLoading === extension.directory"
+                            >
+                                <i v-if="extensionEnableLoading === extension.directory" class="fas fa-spinner fa-spin"></i>
+                                <i v-else :class="extension.enabled ? 'fas fa-toggle-on' : 'fas fa-toggle-off'"></i>
+                                {{ extension.enabled ? '停用' : '启用' }}
+                            </button>
+                            <button v-if="extension.enabled && extension.hasPopup && extension.extensionId" @click="openExtensionPopup(extension.extensionId)" class="extension-btn secondary" :disabled="extensionsLoading">
                                 <i class="fas fa-up-right-from-square"></i>
                                 {{ t('da-kai-tan-chuang') }}
                             </button>
-                            <button @click="uninstallExtension(extension.id, extension.name, extension.directory)" class="extension-btn danger" :disabled="extensionsLoading">
+                            <button @click="uninstallExtension(extension.extensionId || extension.id, extension.name, extension.directory)" class="extension-btn danger" :disabled="extensionsLoading">
                                 <i class="fas fa-trash"></i>
                                 {{ t('xie-zai') }}
                             </button>
@@ -93,7 +106,7 @@
                         <i class="fas fa-exclamation-triangle" aria-hidden="true"></i>
                         <span>当前萌音版本较低，插件最低支持 V{{ extension.minversion }}</span>
                     </p>
-                    <div v-if="extension.nativeHosts?.length" class="native-host-panel">
+                    <div v-if="extension.enabled && extension.nativeHosts?.length" class="native-host-panel">
                         <div class="native-host-title">
                             <i class="fas fa-terminal" aria-hidden="true"></i>
                             <span>本地二进制可执行程序权限</span>
@@ -110,10 +123,10 @@
                                 <button
                                     class="extension-btn"
                                     :class="host.authorized ? 'danger' : 'primary'"
-                                    :disabled="extensionsLoading || nativeHostActionLoading === `${extension.id}:${host.id}` || !host.valid || !host.supported"
+                                    :disabled="extensionsLoading || nativeHostActionLoading === `${extension.extensionId || extension.id}:${host.id}` || !host.valid || !host.supported"
                                     @click="toggleNativeHostAuthorization(extension, host)"
                                 >
-                                    <i v-if="nativeHostActionLoading === `${extension.id}:${host.id}`" class="fas fa-spinner fa-spin"></i>
+                                    <i v-if="nativeHostActionLoading === `${extension.extensionId || extension.id}:${host.id}`" class="fas fa-spinner fa-spin"></i>
                                     <i v-else :class="host.authorized ? 'fas fa-ban' : 'fas fa-shield-alt'"></i>
                                     {{ host.authorized ? '取消授权' : '授权' }}
                                 </button>
@@ -278,6 +291,7 @@ const marketPage = ref(1)
 const marketActionLoading = ref('')
 const currentAppVersion = ref('')
 const nativeHostActionLoading = ref('')
+const extensionEnableLoading = ref('')
 
 const normalizedInstalledExtensions = computed(() => extensions.value)
 
@@ -559,7 +573,8 @@ const resolveMarketPermissions = plugin => {
 
 const toggleNativeHostAuthorization = async (extension, host) => {
     const nextAuthorized = !host.authorized
-    const loadingKey = `${extension.id}:${host.id}`
+    const runtimeExtensionId = extension.extensionId || extension.id
+    const loadingKey = `${runtimeExtensionId}:${host.id}`
 
     if (nextAuthorized) {
         const confirmed = await showConfirm({
@@ -575,7 +590,7 @@ const toggleNativeHostAuthorization = async (extension, host) => {
 
     nativeHostActionLoading.value = loadingKey
     try {
-        const result = await window.electronAPI?.setNativeHostAuthorization(extension.id, host.id, nextAuthorized)
+        const result = await window.electronAPI?.setNativeHostAuthorization(runtimeExtensionId, host.id, nextAuthorized)
         if (!result?.success) {
             throw new Error(result?.message || '操作失败')
         }
@@ -635,6 +650,16 @@ const resolveMarketState = plugin => {
         }
     }
 
+    if (installedExtension.enabled === false) {
+        return {
+            badgeClass: 'disabled',
+            badgeText: `已安装（已停用）${installedExtension.version}`,
+            buttonClass: 'secondary',
+            buttonIcon: 'fas fa-check',
+            buttonText: '重新安装'
+        }
+    }
+
     return {
         badgeClass: 'installed',
         badgeText: `已安装 ${installedExtension.version}`,
@@ -665,7 +690,7 @@ const handleMarketInstall = async plugin => {
     try {
         const result = await window.electronAPI?.installPluginFromUrl(
             plugin.downloadUrl,
-            installedExtension?.id || '',
+            installedExtension?.extensionId || installedExtension?.id || '',
             installedExtension?.directory || ''
         )
 
@@ -698,8 +723,31 @@ const openPluginsRepo = () => {
     window.open('https://github.com/MoeKoeMusic/MoeKoeMusic-Plugins', '_blank', 'noopener,noreferrer')
 }
 
+const toggleExtensionEnabled = async extension => {
+    const nextEnabled = !extension.enabled
+    extensionEnableLoading.value = extension.directory
+
+    try {
+        const result = await window.electronAPI?.setExtensionEnabled(extension.directory, nextEnabled)
+        if (!result?.success) {
+            throw new Error(result?.message || '操作失败')
+        }
+
+        await refreshExtensions()
+    } catch (error) {
+        showAlert(`插件 ${extension.name} ${nextEnabled ? '启用' : '停用'}失败: ${error?.message || '未知错误'}`)
+    } finally {
+        extensionEnableLoading.value = ''
+    }
+}
+
 const openExtensionPopup = async extensionId => {
     try {
+        if (!extensionId) {
+            showAlert(`${t('da-kai-tan-chuang-shi-bai')}: 插件未启用`)
+            return
+        }
+
         const result = await window.electronAPI?.openExtensionPopup(extensionId)
         if (!result?.success) {
             showAlert(`${t('da-kai-tan-chuang-shi-bai')}: ${result?.message || t('wei-zhi-cuo-wu')}`)
@@ -1168,6 +1216,11 @@ $border-dark: #232527;
         color: #4b5563;
     }
 
+    &.disabled {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
     &:is(.dark .extension-status, .dark .market-badge) {
 
         &.enabled,
@@ -1189,6 +1242,11 @@ $border-dark: #232527;
         &.unknown {
             background: #4b5563;
             color: #f3f4f6;
+        }
+
+        &.disabled {
+            background: #374151;
+            color: #d1d5db;
         }
     }
 }
