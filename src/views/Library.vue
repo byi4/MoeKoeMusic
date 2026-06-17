@@ -184,10 +184,24 @@ const isListenSectionHidden = ref(localStorage.getItem(LISTEN_SECTION_HIDDEN_KEY
 const showListenSection = computed(() => !isListenSectionHidden.value && (isLoading.value || listenHistory.value.length > 0));
 const profileBgColor = ref(DEFAULT_PROFILE_BG_COLOR);
 const profileBackgroundImage = ref('');
-const profileHeaderStyle = computed(() => ({
-    '--profile-bg-image': profileBackgroundImage.value ? `url(${profileBackgroundImage.value})` : 'none',
-    '--profile-bg-color': profileBgColor.value
-}));
+const profileHeaderStyle = computed(() => {
+    let bgImage = profileBackgroundImage.value;
+    if (bgImage) {
+        if (!/^https?:\/\//i.test(bgImage) && !bgImage.startsWith('data:')) {
+            try {
+                bgImage = new URL(bgImage, document.baseURI).href;
+            } catch (_) { }
+        }
+        return {
+            '--profile-bg-image': `url(${bgImage})`,
+            '--profile-bg-color': profileBgColor.value
+        };
+    }
+    return {
+        '--profile-bg-image': 'none',
+        '--profile-bg-color': profileBgColor.value
+    };
+});
 
 const selectCategory = (index) => {
     selectedCategory.value = index;
